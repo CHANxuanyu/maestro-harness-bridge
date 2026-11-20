@@ -23,6 +23,14 @@ describe('Agents Preload API', () => {
 		api = createAgentsApi();
 	});
 
+	it('forwards typed model catalog account context unchanged', async () => {
+		const request = { provider: 'codex' as const, sessionId: 'stored-agent' };
+		const catalog = { provider: 'codex', models: [], stale: true };
+		mockInvoke.mockResolvedValue(catalog);
+		expect(await api.getModelCatalog(request)).toEqual(catalog);
+		expect(mockInvoke).toHaveBeenCalledWith('agents:getModelCatalog', request);
+	});
+
 	it('forwards the native command context and cache-only flag', async () => {
 		const context = {
 			toolType: 'codex',

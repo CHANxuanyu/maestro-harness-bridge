@@ -70,9 +70,12 @@ agent offers or what a tab is currently running.
 | `useAgentModelEffortOptions` | `(agentId?: string) => { models, efforts, defaultModel, defaultEffort, loaded }` | Fetches all four with a stale guard. Probes BOTH `effort` and `reasoningEffort` config keys, since agents split between them. `loaded` is false until every lookup settles - an empty list means "still loading" and "not offered" alike. |
 | `resolveModelEffort`         | `(tab, session, { defaultModel, defaultEffort }) => { model, effort }`           | Applies tab override > session override > agent default > empty. Do NOT re-derive this ladder inline - it drifts.                                                                                                                         |
 
-Effort options are agent-scoped, not model-scoped: the underlying CLIs expose a
-single list per agent, and a model with no reasoning budget just ignores the
-flag. Don't invent per-model effort lists without a data source for them.
+The legacy hook exposes provider-wide effort options. New Claude/Codex pickers
+must use the account-scoped `agents.getModelCatalog()` contract and helpers in
+`src/shared/modelCatalog.ts`: the vendor files declare each model's supported
+levels, and unsupported values can be rejected. See
+[model-catalog-api.md](../round2/dev/model-catalog-api.md). The old hook remains for
+existing consumers until the new picker is integrated.
 
 ---
 
@@ -255,6 +258,11 @@ because that cost is paid on the main thread on every store write (~40ms on the
 
 ## Formatting (`src/shared/formatters.ts` - Both)
 
+Renderer prose lists use `useFormatList()` in `src/renderer/i18n/format.ts`
+(re-exported by the i18n barrel). It memoizes `Intl.ListFormat` for the current
+UI locale. Use it for scope, issue and status lists instead of hard-coded
+commas or CJK separators; it leaves every supplied item unchanged.
+
 | Function                               | Signature                              | Purpose                                                                           |
 | -------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------- |
 | `formatSize(bytes)`                    | `(number) => string`                   | File size: `"1.5 MB"`, `"256 KB"`. Auto-scales B/KB/MB/GB/TB.                     |
@@ -318,6 +326,8 @@ works. `duration.ts` is canonical and is where new duration work belongs.
 | `formatElapsedTicker(ms)`             | `(number) => string`            | Live ticker with a leading `0m` below an hour: `"0m 3s"`, `"1h 0m 5s"`. ThinkingStatusPill and Auto Run elapsed on that pill use this, not `formatElapsedTime`.                                    |
 | `formatElapsedTickerCompact(ms)`      | `(number) => string`            | Same ladder without the padded lead: `"3s"`, `"20m 4s"`, `"1h 2m 5s"`. For a counter inside a chip or sentence, where a bare seconds count reads fine below a minute but `1203s` does not past it. |
 | `formatTurnDuration(ms)`              | `(number) => string`            | Transcript turn time, day-capped and second-free: `"<1m"`, `"25m"`, `"5d 6h 25m"`.                                                                                                                 |
+
+`steppedElapsedTime(ms)` returns the displayed elapsed milliseconds and delay to the next new-shell running-counter boundary. `formatSteppedElapsed(ms, justStarted)` formats the same boundaries with the caller's translated initial label: ten-second steps below one minute, then whole minutes. The shared `ElapsedTimeDisplay` schedules these boundaries.
 
 `DURATION_MS` gives each unit's size in ms - use it instead of redeclaring
 `const DAY = 86400000`. `DURATION_LADDER_FULL` / `_DAYS` / `_HOURS` are the prebuilt

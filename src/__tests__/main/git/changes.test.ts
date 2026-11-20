@@ -111,6 +111,22 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 		}
 	});
 
+	it('still ends a tracked turn that wrote nothing, so a follow-up never waits on it', async () => {
+		const observed = vi.fn();
+		const unsubscribe = onGitTurnFinished(observed, (id) => id === 'idle-check');
+		try {
+			await beginGitTurn('idle-check', cwd);
+			const delivery = await finishGitTurn('idle-check');
+			expect(delivery).toMatchObject({ files: 0, paths: [] });
+			expect(observed).toHaveBeenCalledWith('idle-check', delivery, { cwd, changed: false });
+			// An untracked turn without tool writes keeps the plain no-delivery result.
+			await beginGitTurn('untracked', cwd);
+			expect(await finishGitTurn('untracked')).toBeUndefined();
+		} finally {
+			unsubscribe();
+		}
+	});
+
 	it('does not replace unknown boundary counts with the workspace diff after HEAD moves', async () => {
 		await beginGitTurn('head-moved', cwd);
 		writeFileSync(path.join(cwd, 'new.txt'), 'one\n');

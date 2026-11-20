@@ -1,3 +1,4 @@
+import { flushPendingSessionSave } from './quitSave';
 import { createKeyedWriteQueue } from '../../shared/keyedWriteQueue';
 import type { AgentSshRemoteConfig } from '../../shared/types';
 import type { Session } from '../types';
@@ -79,5 +80,8 @@ export async function saveSessionToolConfig(
 		access.setSessions((sessions) =>
 			sessions.map((session) => (session.id === sessionId ? { ...session, ...updated } : session))
 		);
+		// A previously queued autosave may land after the explicit write. Confirm
+		// the updated live snapshot before acknowledging an immediate CLI read.
+		await flushPendingSessionSave();
 	});
 }

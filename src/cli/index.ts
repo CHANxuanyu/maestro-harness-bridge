@@ -34,6 +34,7 @@ import { ask } from './commands/ask';
 import { handoff } from './commands/handoff';
 import { changes } from './commands/changes';
 import { permissionCommand } from './commands/permission';
+import { modelsCommand } from './commands/models';
 import { queueList, queueRemove } from './commands/queue';
 import {
 	snoozeDismiss,
@@ -311,6 +312,15 @@ campaign
 
 // List commands
 const list = program.command('list').description('List resources');
+
+program
+	.command('models <provider>')
+	.description('Read the provider model catalog and cached quota (requires desktop)')
+	.option('--agent <id>', 'Use a stored agent account and host')
+	.option('--account-dir <path>', 'Use an explicit provider account directory')
+	.option('--ssh-remote <id>', 'Use a remote host (typed catalog currently unsupported)')
+	.option('--json', 'Output the full typed catalog as JSON')
+	.action(modelsCommand);
 
 list
 	.command('groups')

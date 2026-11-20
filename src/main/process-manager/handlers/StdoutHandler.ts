@@ -626,6 +626,7 @@ export class StdoutHandler {
 		event: ParsedEvent,
 		outputParser: NonNullable<ManagedProcess['outputParser']>
 	): void {
+		if (event.newShellActivityOnly && !managedProcess.newShellActivity) return;
 		// Stop abandons held notices; a later result must not raise them again.
 		const settleHeldErrorAfterResult =
 			!!managedProcess.provisionalError &&

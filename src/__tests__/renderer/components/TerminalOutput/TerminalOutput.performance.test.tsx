@@ -14,6 +14,17 @@ import { useComposerInputStore } from '../../../../renderer/stores/composerInput
 import { useAgentDataListener } from '../../../../renderer/hooks/agent/internal/useAgentDataListener';
 import { useBatchedSessionUpdates } from '../../../../renderer/hooks/session/useBatchedSessionUpdates';
 import { useInputAreaTextChange } from '../../../../renderer/components/InputArea/hooks/useInputAreaTextChange';
+import { collectTurnWrites } from '../../../../shared/gitChangeTurns';
+import { latestAgentTaskList } from '../../../../renderer/utils/agentTaskList';
+
+vi.mock('../../../../shared/gitChangeTurns', async (original) => {
+	const actual = await original<typeof import('../../../../shared/gitChangeTurns')>();
+	return { ...actual, collectTurnWrites: vi.fn(actual.collectTurnWrites) };
+});
+vi.mock('../../../../renderer/utils/agentTaskList', async (original) => {
+	const actual = await original<typeof import('../../../../renderer/utils/agentTaskList')>();
+	return { ...actual, latestAgentTaskList: vi.fn(actual.latestAgentTaskList) };
+});
 
 const activityBarRenders = vi.hoisted(() => vi.fn());
 vi.mock(
@@ -107,6 +118,106 @@ function outputProps(session: TerminalOutputProps['session']): TerminalOutputPro
 		setMarkdownEditMode: vi.fn(),
 	};
 }
+
+it('does not refold finished turns for streamed chunks after full backfill', () => {
+	const turns = 2000;
+	const chunks = 15;
+	const history: LogEntry[] = Array.from({ length: turns }, (_, turn) => [
+		{ id: `user-${turn}`, source: 'user' as const, text: 'Question', timestamp: turn * 4000 },
+		{
+			id: `tool-${turn}`,
+			source: 'tool' as const,
+			text: 'Write',
+			timestamp: turn * 4000 + 1000,
+			metadata: { toolState: { status: 'completed' as const, input: { file_path: 'a.ts' } } },
+		},
+		{
+			id: `reply-${turn}`,
+			source: 'stdout' as const,
+			text: 'Answer',
+			timestamp: turn * 4000 + 2000,
+		},
+		// Exercise multi-entry response groups as well as single-entry replies.
+		...(turn % 2
+			? [
+					{
+						id: `tail-${turn}`,
+						source: 'stdout' as const,
+						text: ' tail',
+						timestamp: turn * 4000 + 2001,
+					},
+				]
+			: []),
+	]).flat();
+	const user: LogEntry = {
+		id: 'open-user',
+		source: 'user',
+		text: 'Continue',
+		timestamp: turns * 4000,
+	};
+	const session = createMockSession({
+		id: 'fold-work-session',
+		activeTabId: 'fold-work-tab',
+		aiTabs: [createMockAITab({ id: 'fold-work-tab', state: 'busy', logs: [...history, user] })],
+	});
+	const props = outputProps(session);
+	const view = render(<TerminalOutput {...props} />);
+	let ticks = 0;
+	while (idle.size && ticks++ < history.length) {
+		const [id, callback] = idle.entries().next().value!;
+		idle.delete(id);
+		act(callback);
+	}
+	expect(view.getAllByTestId('activity-collapsed')).toHaveLength(turns);
+	expect(view.getAllByTestId('turn-delivery')).toHaveLength(turns);
+	vi.mocked(collectTurnWrites).mockClear();
+	vi.mocked(latestAgentTaskList).mockClear();
+	for (let chunk = 0; chunk < chunks; chunk++) {
+		view.rerender(
+			<TerminalOutput
+				{...props}
+				session={{
+					...session,
+					aiTabs: [
+						{
+							...session.aiTabs[0],
+							logs: [
+								...history,
+								user,
+								{
+									id: 'open-reply',
+									source: 'stdout',
+									text: `Chunk ${chunk}`,
+									timestamp: user.timestamp + 1,
+								},
+							],
+						},
+					],
+				}}
+			/>
+		);
+	}
+	const deliveryCalls = vi.mocked(collectTurnWrites).mock.calls;
+	const planCalls = vi.mocked(latestAgentTaskList).mock.calls;
+	const work = {
+		turns,
+		chunks,
+		deliveryCalls: deliveryCalls.length,
+		deliveryEntries: deliveryCalls.reduce((sum, [entries]) => sum + entries.length, 0),
+		planCalls: planCalls.length,
+		planEntries: planCalls.reduce((sum, [entries]) => sum + entries.length, 0),
+	};
+	console.info(JSON.stringify(work));
+	expect(work).toEqual({
+		turns,
+		chunks,
+		deliveryCalls: 0,
+		deliveryEntries: 0,
+		planCalls: 0,
+		planEntries: 0,
+	});
+	expect(view.container.querySelector('[data-log-id="open-reply"]')).toHaveTextContent('Chunk 14');
+}, 180_000);
 
 it('builds row elements once while hydrating every history entry in order', () => {
 	const count = Number(process.env.PERF_ROW_COUNT ?? 1000);
@@ -394,6 +505,8 @@ it.each([true, false])(
 		transcriptRenders.mockClear();
 		activityBarRenders.mockClear();
 		vi.mocked(formatElapsedTickerCompact).mockClear();
+		vi.mocked(collectTurnWrites).mockClear();
+		vi.mocked(latestAgentTaskList).mockClear();
 		const storeUpdates = vi.fn();
 		const unsubscribe = useSessionStore.subscribe((state, previous) => {
 			if (state.sessions !== previous.sessions) storeUpdates();
@@ -449,14 +562,21 @@ it.each([true, false])(
 		expect(vi.mocked(formatElapsedTickerCompact)).toHaveBeenCalledTimes(
 			newShell ? 0 : historyTurns * 15
 		);
-		// The first entry takes over the placeholder host once. Answer-only batches
-		// do not change the closed bar, so the remaining batches must not redraw it.
-		expect(activityBarRenders).toHaveBeenCalledTimes(newShell ? 1 : 0);
+		// Answer batches render outside the activity bar. They must never redraw it,
+		// including the first chunk while the process is still running.
+		expect(activityBarRenders).toHaveBeenCalledTimes(0);
+		if (newShell) {
+			expect(collectTurnWrites).not.toHaveBeenCalled();
+			expect(latestAgentTaskList).not.toHaveBeenCalled();
+		}
+		const answer = view.container.querySelector(
+			`[data-log-id="${finalLogs[history.length + 1].id}"]`
+		);
+		expect(answer).toHaveTextContent(Array.from({ length: 300 }, (_, i) => `chunk-${i}`).join(' '));
 		if (newShell) {
 			fireEvent.click(view.getByTestId('activity-toggle'));
-			expect(view.container.querySelector('[data-turn-activity-steps]')).toHaveTextContent(
-				Array.from({ length: 300 }, (_, i) => `chunk-${i}`).join(' ')
-			);
+			expect(answer?.closest('[data-turn-activity-steps]')).toBeNull();
+			expect(view.getByTestId('activity-toggle')).toHaveAttribute('data-activity-state', 'running');
 		}
 	}
 );

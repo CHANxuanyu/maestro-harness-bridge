@@ -4,7 +4,7 @@
  * existing English string (and test) is byte-identical.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { AppLocale } from '../../shared/i18n';
 import { formatRelativeTime } from '../../shared/formatters';
 import { useAppLocale } from './useI18n';
@@ -34,4 +34,13 @@ export function formatRelativeTimeFor(locale: AppLocale, value: DateInput): stri
 export function useFormatRelativeTime(): (value: DateInput) => string {
 	const locale = useAppLocale();
 	return useCallback((value: DateInput) => formatRelativeTimeFor(locale, value), [locale]);
+}
+
+/** Human-readable lists follow the UI language, including its conjunction and punctuation. */
+export function useFormatList(): (items: Iterable<string>) => string {
+	const locale = useAppLocale();
+	return useMemo(() => {
+		const formatter = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' });
+		return (items: Iterable<string>) => formatter.format(items);
+	}, [locale]);
 }

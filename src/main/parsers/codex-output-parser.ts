@@ -32,6 +32,7 @@ import { getErrorPatterns, matchErrorPattern } from './error-patterns';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { parseCodexConfig } from '../agents/codex-config';
 
 /**
  * Known OpenAI model context window sizes (in tokens)
@@ -132,22 +133,7 @@ function readCodexConfig(): { model?: string; contextWindow?: number } {
 		}
 
 		const content = fs.readFileSync(configPath, 'utf8');
-		const result: { model?: string; contextWindow?: number } = {};
-
-		// Simple TOML parsing for the fields we care about
-		// model = "gpt-5.1"
-		const modelMatch = content.match(/^\s*model\s*=\s*"([^"]+)"/m);
-		if (modelMatch) {
-			result.model = modelMatch[1];
-		}
-
-		// model_context_window = 128000
-		const windowMatch = content.match(/^\s*model_context_window\s*=\s*(\d+)/m);
-		if (windowMatch) {
-			result.contextWindow = parseInt(windowMatch[1], 10);
-		}
-
-		return result;
+		return parseCodexConfig(content);
 	} catch {
 		// Config file doesn't exist or can't be read - use defaults
 		return {};
@@ -877,7 +863,8 @@ export class CodexOutputParser implements AgentOutputParser {
 	 * Transform a command start or an update containing output accumulated so far.
 	 */
 	private transformItemStarted(item: CodexItem, msg: CodexRawMessage): ParsedEvent {
-		if (item.type === 'todo_list') return this.transformItemCompleted(item, msg);
+		if (item.type === 'todo_list' || item.type === 'file_change')
+			return this.transformItemCompleted(item, msg);
 		if (item.type === 'command_execution') {
 			return {
 				type: 'tool_use',
@@ -916,13 +903,18 @@ export class CodexOutputParser implements AgentOutputParser {
 					type: 'tool_use',
 					toolName: 'file_change',
 					toolCallId: item.id,
+					...(msg.type !== 'item.completed'
+						? { newShellActivityOnly: true, isPartial: msg.type === 'item.updated' }
+						: {}),
 					toolState: {
 						status:
-							item.status === 'completed'
-								? 'completed'
-								: item.status === 'failed'
-									? 'failed'
-									: 'unknown',
+							msg.type !== 'item.completed'
+								? 'running'
+								: item.status === 'completed'
+									? 'completed'
+									: item.status === 'failed'
+										? 'failed'
+										: 'unknown',
 						input: { changes: item.changes },
 					},
 					raw: msg,

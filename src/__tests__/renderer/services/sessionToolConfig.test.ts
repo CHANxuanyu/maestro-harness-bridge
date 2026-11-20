@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerQuitSave } from '../../../renderer/services/quitSave';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
@@ -11,6 +12,30 @@ beforeEach(() => {
 });
 
 describe('saveSessionToolConfig', () => {
+	it('confirms the latest configuration after an older autosave was already queued', async () => {
+		const owner = createMockSession({
+			id: 'owner',
+			customPath: '/fixture/old',
+			enableMaestroP: false,
+		});
+		useSessionStore.setState({ sessions: [owner] });
+		let persisted = owner;
+		vi.mocked(window.maestro.sessions.setMany).mockImplementationOnce(async () => {
+			// The explicit write finishes, then an already queued autosave lands.
+			persisted = owner;
+			return true;
+		});
+		const unregister = registerQuitSave(async () => {
+			persisted = useSessionStore.getState().sessions[0];
+		});
+		try {
+			await saveSessionToolConfig(owner.id, { customPath: '/fixture/new', enableMaestroP: true });
+			expect(persisted).toMatchObject({ customPath: '/fixture/new', enableMaestroP: true });
+		} finally {
+			unregister();
+		}
+	});
+
 	it('updates only allowed fields and retains all current conversation state', async () => {
 		const owner = createMockSession({
 			id: 'owner',

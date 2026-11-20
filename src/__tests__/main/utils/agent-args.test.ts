@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../shared/modelCatalog';
 /**
  * Tests for src/main/utils/agent-args.ts
  *
@@ -1752,4 +1753,29 @@ describe('buildAgentArgs with the Antigravity definition', () => {
 			'30m',
 		]);
 	});
+});
+
+describe('catalog native defaults', () => {
+	it.each(['codex', 'claude-code'])(
+		'omits Maestro model and effort flags for %s while preserving classic empty inheritance',
+		(provider) => {
+			const agent = makeAgent(getAgentDefinition(provider)!);
+			const agentConfigValues = { model: 'fixture-model', effort: 'high', reasoningEffort: 'high' };
+			const native = applyAgentConfigOverrides(agent, [], {
+				agentConfigValues,
+				sessionCustomModel: NATIVE_MODEL_DEFAULT,
+				sessionCustomEffort: NATIVE_MODEL_DEFAULT,
+			});
+			expect(native.args.join(' ')).not.toContain('fixture-model');
+			expect(native.args.join(' ')).not.toContain('high');
+			expect(native.args.join(' ')).not.toContain(NATIVE_MODEL_DEFAULT);
+			const inherited = applyAgentConfigOverrides(agent, [], {
+				agentConfigValues,
+				sessionCustomModel: '',
+				sessionCustomEffort: '',
+			});
+			expect(inherited.args.join(' ')).toContain('fixture-model');
+			expect(inherited.args.join(' ')).toContain('high');
+		}
+	);
 });

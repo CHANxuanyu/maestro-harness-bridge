@@ -265,8 +265,13 @@ export function availabilityDelayMs(attempt: number): number {
  *
  * @param error the failing error
  * @param now   current epoch ms (injectable for tests)
+ * @param fallbackTimeZone explicit host zone for local team seats with bare clock notices
  */
-export function tokenExhaustionResetAt(error: ClassifiableError, now: number): number | undefined {
+export function tokenExhaustionResetAt(
+	error: ClassifiableError,
+	now: number,
+	fallbackTimeZone?: string
+): number | undefined {
 	const fromJson = parseResetFromJson(error.parsedJson, now);
 	if (fromJson !== undefined) return fromJson + RESET_TIME_BUFFER_MS;
 
@@ -280,7 +285,7 @@ export function tokenExhaustionResetAt(error: ClassifiableError, now: number): n
 		const fromEpochMarker = parseEpochMarkerFromMessage(text, now);
 		if (fromEpochMarker !== undefined) return fromEpochMarker + RESET_TIME_BUFFER_MS;
 
-		const fromClock = parseZonedResetFromMessage(text, now);
+		const fromClock = parseZonedResetFromMessage(text, now, fallbackTimeZone);
 		if (fromClock !== undefined) return fromClock + RESET_TIME_BUFFER_MS;
 	}
 
@@ -450,11 +455,17 @@ function parseEpochMarkerFromMessage(message: string, now: number): number | und
  * what every Claude plan window means (session/5-hour limits reset within the
  * day; a same-day time already past belongs to tomorrow).
  */
-function parseZonedResetFromMessage(message: string, now: number): number | undefined {
-	const match =
+function parseZonedResetFromMessage(
+	message: string,
+	now: number,
+	fallbackTimeZone?: string
+): number | undefined {
+	let match =
 		/resets?\b[^()\n]*?\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?[^()\n]*\(([A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)+)\)/i.exec(
 			message
 		);
+	if (!match && fallbackTimeZone)
+		match = /resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(message);
 	if (!match) return undefined;
 
 	const meridiem = match[3]?.toLowerCase();
@@ -469,7 +480,7 @@ function parseZonedResetFromMessage(message: string, now: number): number | unde
 		return undefined;
 	}
 
-	const timeZone = match[4];
+	const timeZone = match[4] ?? fallbackTimeZone!;
 	const target = nextZonedOccurrence(hour, minute, timeZone, now);
 	// An unknown zone throws inside Intl; treat it as unparseable rather than
 	// letting a typo'd notice take down the retry scheduler.

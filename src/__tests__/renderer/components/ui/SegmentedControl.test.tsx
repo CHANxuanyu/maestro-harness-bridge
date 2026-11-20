@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import * as horizontalScroll from '../../../../renderer/hooks/ui/useHorizontalScroll';
 /**
  * Tests for SegmentedControl.
  *
@@ -144,4 +146,68 @@ describe('SegmentedControl', () => {
 
 		expect(screen.getByTestId('sort-name').querySelector('.segmented-label-full')).toBeNull();
 	});
+});
+
+it('uses underline tab semantics, count badges, overflow hints and keyboard focus', () => {
+	const scrollIntoView = vi.fn();
+	const scrolling = vi.spyOn(horizontalScroll, 'useHorizontalScroll').mockReturnValue({
+		canScrollLeft: false,
+		canScrollRight: true,
+		scrollByPage: vi.fn(),
+		scrollIntoView,
+	});
+	function Tabs() {
+		const [value, onChange] = useState<Mode>('name');
+		return (
+			<SegmentedControl
+				variant="underline"
+				value={value}
+				onChange={onChange}
+				options={OPTIONS.map((option) => ({
+					...option,
+					count: option.value === 'created' ? 3 : undefined,
+					controls: 'content',
+				}))}
+				theme={mockTheme}
+				ariaLabel="Views"
+			/>
+		);
+	}
+	const view = render(<Tabs />);
+	try {
+		const tabs = screen.getAllByRole('tab');
+		for (const tab of tabs) expect(tab).toHaveStyle({ padding: '0 8px' });
+		expect(screen.getByRole('tablist')).toHaveClass('overflow-x-auto');
+		expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+		expect(tabs[0]).toHaveAttribute('aria-controls', 'content');
+		expect(tabs[0]).not.toHaveAttribute('aria-checked');
+		expect(tabs[1].querySelector('[data-tab-count]')).toHaveTextContent('3');
+		expect(view.container.querySelector('[data-scroll-edge="right"]')).toHaveAttribute(
+			'aria-hidden',
+			'true'
+		);
+		expect(view.container.querySelector('[data-scroll-edge="left"]')).toBeNull();
+		tabs[0].focus();
+		fireEvent.keyDown(tabs[0], { key: 'ArrowRight' });
+		expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+		expect(tabs[1]).toHaveFocus();
+		expect(tabs[0]).toHaveAttribute('tabindex', '-1');
+		expect(scrollIntoView).toHaveBeenLastCalledWith(tabs[1], 20);
+		fireEvent.keyDown(tabs[1], { key: 'ArrowLeft' });
+		expect(tabs[0]).toHaveFocus();
+		fireEvent.keyDown(tabs[0], { key: 'ArrowLeft' });
+		expect(tabs[2]).toHaveFocus();
+		expect(scrollIntoView).toHaveBeenLastCalledWith(tabs[2], 20);
+		scrolling.mockReturnValue({
+			canScrollLeft: false,
+			canScrollRight: false,
+			scrollByPage: vi.fn(),
+			scrollIntoView,
+		});
+		fireEvent.click(tabs[0]);
+		expect(view.container.querySelector('[data-scroll-edge]')).toBeNull();
+	} finally {
+		view.unmount();
+		scrolling.mockRestore();
+	}
 });

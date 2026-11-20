@@ -20,6 +20,6 @@ export { interpolate } from './interpolate';
 export { interpolateNodes } from './richText';
 export { applyDocumentLanguage, getSystemLocale } from './documentLanguage';
 export { LANGUAGE_OPTIONS } from './languageOptions';
-export { formatRelativeTimeFor, useFormatRelativeTime } from './format';
+export { formatRelativeTimeFor, useFormatRelativeTime, useFormatList } from './format';
 export { localizedFileManagerName } from './platformLabels';
 export { localizeShortcutLabel, useShortcutLabel } from './shortcutLabels';

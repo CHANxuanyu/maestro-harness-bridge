@@ -205,6 +205,7 @@ export const DEFAULT_SHORTCUTS = {
 		keys: ['Meta', 'Shift', 'p'],
 	},
 	openWizard: { id: 'openWizard', label: 'New Agent Wizard', keys: ['Meta', 'Shift', 'n'] },
+	createTeam: { id: 'createTeam', label: 'New team', keys: ['Meta', 'Alt', 'n'] },
 	openModelEffort: {
 		id: 'openModelEffort',
 		label: 'Change Tabs Model and Effort',

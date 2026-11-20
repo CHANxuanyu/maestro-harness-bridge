@@ -1,5 +1,7 @@
 import path from 'path';
 import { app } from 'electron';
+import { captureTeamOutput } from './output-capture';
+import { teamQuotaSample } from './quota';
 import { createTeamScheduler } from './scheduler';
 import { createTeamStore } from './team-store';
 import { createTeamWorkspaces } from './workspaces';
@@ -13,6 +15,7 @@ import { getAgentAccountDirLayers } from '../agents/provider-account-dirs';
 import { transcriptMessagesToLogEntries } from '../../shared/transcriptEntries';
 import { execGitReadOnly } from '../utils/remote-git';
 import { logger } from '../utils/logger';
+import { teamEventForTransport } from '../../shared/team/ledger';
 
 /** Match a result to its user-turn marker, never to the latest reply in an account. */
 export async function reconcileTeamTurn(request: SeatTurnRequest): Promise<SeatTurnResult | null> {
@@ -91,31 +94,41 @@ export function createTeamRuntime(
 				slug: config.id,
 				pushAuthorized,
 			}),
-		seatOptions: (config, seat) => ({
-			customPath: config.seats[seat].customPath,
-			customArgs: config.seats[seat].customArgs,
-			customEnv: config.seats[seat].customEnv,
-		}),
+		quota: (config, source, model) =>
+			teamQuotaSample(
+				{ ...(config.seats[source].tool === model.tool ? config.seats[source] : {}), ...model },
+				deps.agentConfigsStore.get('configs', {})[model.tool]?.customEnvVars,
+				Date.now()
+			),
+		seatOptions: (config, seat, model) =>
+			model && model.tool !== config.seats[seat].tool
+				? {}
+				: {
+						customPath: config.seats[seat].customPath,
+						customArgs: config.seats[seat].customArgs,
+						customEnv: config.seats[seat].customEnv,
+					},
+		seatAccountDir: (config, source, model) => {
+			const tool = model?.tool ?? config.seats[source].tool;
+			return resolveAgentAccountDir(
+				{
+					toolType: tool,
+					customEnvVars:
+						tool === config.seats[source].tool ? config.seats[source].customEnv : undefined,
+					sshRemote: !!config.sshRemoteId,
+				},
+				getAgentAccountDirLayers(tool)
+			);
+		},
 		reconcile: async (request) => {
 			// Inspect the workspace as well as native history before deciding to repeat a turn.
 			await execGitReadOnly(['status', '--porcelain'], request.cwd);
 			return reconcileTeamTurn(request);
 		},
-		captureOutput: async (cwd, revision) => {
-			const result = await execGitReadOnly(['ls-tree', '-r', '--name-only', '-z', revision], cwd);
-			if (result.exitCode !== 0) throw new Error(result.stderr);
-			return {
-				files: result.stdout
-					.split('\0')
-					.filter(Boolean)
-					.slice(0, 200)
-					.map((file) => path.join(cwd, file)),
-				previews: [],
-			};
-		},
+		captureOutput: captureTeamOutput,
 	});
 	const unsubscribe = store.subscribe((teamId, event) =>
-		deps.safeSend('team:changed', { teamId, event })
+		deps.safeSend('team:changed', { teamId, event: teamEventForTransport(event) })
 	);
 	app.once('will-quit', () => {
 		scheduler.dispose();

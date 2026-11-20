@@ -11,6 +11,7 @@ vi.mock('../../main/utils/ssh-spawn-wrapper', () => ({
 	sshUnresolvedRemoteMessage: () => 'SSH remote cannot be resolved',
 }));
 import { wrapSpawnWithSsh } from '../../main/utils/ssh-spawn-wrapper';
+import * as platformDetection from '../../shared/platformDetection';
 import type { SshRemoteSettingsStore } from '../../main/utils/ssh-remote-resolver';
 
 describe('check runner', () => {
@@ -35,6 +36,27 @@ describe('check runner', () => {
 		expect(result.outputTail.endsWith('last error')).toBe(true);
 		expect(result.outputTail).toHaveLength(MAX_PERSISTED_TOOL_OUTPUT_CHARS);
 		expect(result.truncated).toBe(true);
+	});
+
+	it.each([
+		["'missing_tool' is not recognized as an internal or external command,", 'not-run'],
+		['assertion failed', 'fail'],
+	] as const)('reads cmd exit 1 with %j as %s on Windows', async (line, outcome) => {
+		const windows = vi.spyOn(platformDetection, 'isWindows').mockReturnValue(true);
+		try {
+			const exec = vi.fn((_command: string, _args: string[], options: ExecStreamingOptions) => {
+				options.onChunk(line, 'stderr');
+				return {
+					cancel: vi.fn(),
+					result: Promise.resolve({ exitCode: 1, stdout: '', stderr: '' }),
+				};
+			});
+			const result = await createCheckRunner({ exec }).run({ command: 'check', cwd: os.tmpdir() });
+			expect(exec.mock.calls[0][0]).not.toBe('/bin/sh');
+			expect(result.outcome).toBe(outcome);
+		} finally {
+			windows.mockRestore();
+		}
 	});
 
 	it.each(['timeout', 'canceled'] as const)(

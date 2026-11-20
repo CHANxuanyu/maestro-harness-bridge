@@ -1,13 +1,27 @@
 import MarkdownIt from 'markdown-it';
+import {
+	discussionDecider,
+	isOpenTeamIssue,
+	missingOutputLocations,
+	teamEvidence,
+	teamChallengeRound,
+	teamReadyForDemo,
+	teamWorkspaceRelativePath,
+	teamOutputLocation,
+} from './policy';
 import { parseJsonWithBom } from '../jsonUtils';
+import { joinPath } from '../formatters';
 import {
 	REPORT_PERMISSIONS,
 	type SeatRole,
 	type TeamReport,
 	type TeamState,
 	type TurnKind,
+	type ReportNormalization,
+	type Criterion,
 } from './types';
 import { teamReportSchema, type ReportSchema } from './schemas';
+import type { FollowUpCondition } from '../followUp';
 
 const markdown = new MarkdownIt({ html: false, linkify: false });
 
@@ -26,7 +40,7 @@ export function teamReplyMessage(text: string, limit = 12_000): string {
 	return lines.join('\n').trim().slice(0, limit);
 }
 export type TeamReportResult<T = TeamReport> =
-	| { ok: true; report: T }
+	| { ok: true; report: T; normalizations?: ReportNormalization[] }
 	| { ok: false; reason: string };
 
 /** Read the last actual fence, including tilde fences, without treating quoted examples as reports. */
@@ -61,6 +75,12 @@ function shapeError(value: unknown, schema: ReportSchema, path = 'report'): stri
 			: `${path} does not match an allowed shape.`;
 	}
 	if (schema.type === 'null') return value === null ? undefined : `${path} must be null.`;
+	if (schema.type === 'number')
+		return typeof value === 'number' &&
+			Number.isFinite(value) &&
+			value >= (schema.minimum ?? -Infinity)
+			? undefined
+			: `${path} must be a finite nonnegative number.`;
 	if (schema.type === 'boolean')
 		return typeof value === 'boolean' ? undefined : `${path} must be a boolean.`;
 	if (schema.type === 'string') {
@@ -103,9 +123,12 @@ export function validateTeamReport(
 	raw: unknown,
 	expected: TurnKind,
 	seat: SeatRole,
-	state?: TeamState
+	state?: TeamState,
+	resolvedQaPaths?: ReadonlyMap<string, string>
 ): TeamReportResult {
-	const schema = teamReportSchema(expected, seat);
+	// A seat may raise a topic instead of its scheduled work report. The scheduler resumes that work afterwards.
+	if (raw && typeof raw === 'object' && 'type' in raw && raw.type === 'topic') expected = 'topic';
+	const schema = teamReportSchema(expected, seat, true);
 	if (!schema)
 		return {
 			ok: false,
@@ -114,13 +137,161 @@ export function validateTeamReport(
 	const permissions = REPORT_PERMISSIONS[expected as TeamReport['type']];
 	if (!permissions.includes(seat))
 		return { ok: false, reason: `${seat} may not submit ${expected}.` };
+	const normalizations: ReportNormalization[] = [];
+	const note = (field: string, before: unknown, after: unknown, reason: string) => {
+		normalizations.push({ field, before, after, reason });
+	};
+	const drop = (record: Record<string, unknown>, key: string, field: string, reason: string) => {
+		if (!Object.prototype.hasOwnProperty.call(record, key)) return;
+		note(field, record[key], undefined, reason);
+		delete record[key];
+	};
+	if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+		const input = { ...raw } as Record<string, unknown>;
+		if (seat !== 'dev') {
+			for (const key of ['extraTurns', 'preservesDeadline'])
+				drop(input, key, key, 'Only dev supplies implementation cost and deadline estimates.');
+			if (Array.isArray(input.standardChanges))
+				input.standardChanges = input.standardChanges.map((change, index) => {
+					if (!change || typeof change !== 'object' || Array.isArray(change)) return change;
+					const copy = { ...change };
+					for (const key of ['extraTurns', 'preservesDeadline'])
+						drop(
+							copy,
+							key,
+							`standardChanges[${index}].${key}`,
+							'Implementation estimates must come from dev, not the proposing seat.'
+						);
+					return copy;
+				});
+		}
+		if (seat !== 'pm')
+			drop(
+				input,
+				'resolvedStandards',
+				'resolvedStandards',
+				'Only PM may resolve standard issues; no issue was closed by this field.'
+			);
+		if (input.type === 'proposal') {
+			const discussion = state?.discussions.find((d) => d.id === input.discussionId);
+			if (discussion?.opened) {
+				const decider = discussionDecider(discussion);
+				if (input.decider !== decider) {
+					note(
+						'decider',
+						input.decider,
+						decider,
+						'The app assigns the decider from the discussion layer and reversibility.'
+					);
+					input.decider = decider;
+				}
+			}
+		}
+		raw = input;
+	}
 	const error = shapeError(raw, schema);
 	if (error) return { ok: false, reason: error };
 	// Shape validation above establishes the discriminated union. Review normalization below
 	// removes every problem with a missing criterion before returning the typed report.
 	const report = raw as TeamReport;
+	const accept = (value: TeamReport = report): TeamReportResult => ({
+		ok: true,
+		report: value,
+		...(normalizations.length ? { normalizations } : {}),
+	});
 	const fail = (reason: string): TeamReportResult => ({ ok: false, reason });
 	const confirmed = state?.criteria.filter((c) => c.confirmed) ?? [];
+	if (report.standardChanges) {
+		for (const change of report.standardChanges) {
+			if (
+				change.change !== 'remove' &&
+				(!change.criterion || change.criterion.id !== change.criterionId)
+			)
+				return fail('Standard changes require a complete matching criterion definition.');
+			if (
+				change.ownerMessageId &&
+				!state?.pendingMessages.some((m) => m.messageId === change.ownerMessageId)
+			)
+				return fail('Owner authority must reference an actual pending owner message.');
+		}
+	}
+	if (
+		report.type === 'position' ||
+		report.type === 'proposal' ||
+		report.type === 'response' ||
+		report.type === 'retro'
+	) {
+		const discussion = state?.discussions.find((d) => d.id === report.discussionId);
+		if (!discussion?.opened || !discussion.opened.participants.includes(seat))
+			return fail('Only a participant may report on an existing discussion.');
+		if (discussion.decision && report.type !== 'retro')
+			return fail('This discussion already has a conclusion.');
+		if (report.type === 'position') {
+			if (discussion.proposals.length || discussion.positions.some((p) => p.seat === seat))
+				return fail('The sealed position has already been submitted.');
+		}
+		if (report.type === 'proposal') {
+			if (
+				seat !== discussion.opened.owner ||
+				discussion.positions.length !== discussion.opened.participants.length
+			)
+				return fail('The topic owner proposes after every sealed position is recorded.');
+			if (
+				new Set(report.actions.map((a) => a.seat)).size !== report.actions.length ||
+				discussion.opened.participants.some((p) => !report.actions.some((a) => a.seat === p))
+			)
+				return fail('A conclusion needs exactly one action or wait for each participant.');
+		}
+		if (report.type === 'response') {
+			const proposal = discussion.proposals.at(-1);
+			if (!proposal) return fail('Responses require a proposal.');
+			// reportEvents preserves unknown references as unverified basis and records
+			// unsupported insistence as a reservation. Neither is a member fault.
+		}
+		if (report.type === 'retro') {
+			if (seat !== 'pm' || !discussion.decision)
+				return fail('PM records the retro after the team discussion concludes.');
+			if (
+				state!.retros.some(
+					(r) =>
+						r.basis === report.basis &&
+						(discussion.opened!.trigger === 'no-progress' || r.approach === report.approach)
+				)
+			)
+				return fail('Diagnosis requires a new basis, not a repeated approach and basis.');
+		}
+	}
+	if (report.type === 'message') {
+		const messages =
+			state?.pendingMessages.filter(
+				(m) =>
+					(m.to ?? 'pm') === seat ||
+					(seat === 'pm' &&
+						state.messages.find((item) => item.message.messageId === m.messageId)?.forwarded)
+			) ?? [];
+		if (
+			report.messages.length !== messages.length ||
+			new Set(report.messages.map((m) => m.messageId)).size !== messages.length ||
+			report.messages.some((m) => !messages.some((known) => known.messageId === m.messageId))
+		)
+			return fail('A message turn must handle exactly the messages delivered to this seat.');
+		for (const receipt of report.messages) {
+			if (
+				receipt.change &&
+				receipt.change !== 'add' &&
+				(!receipt.scope || !state?.criteria.some((c) => c.id === receipt.criterionId))
+			)
+				return fail('An owner scope edit must name an existing criterion.');
+			if (receipt.change && !['add', 'remove'].includes(receipt.change) && !receipt.criterion)
+				return fail('An owner scope edit requires the complete replacement criterion.');
+		}
+		if (
+			report.resolvedStandards?.some(
+				(r) => !state?.issues.some((i) => i.id === r.issueId && i.opened.issueKind === 'standard')
+			)
+		)
+			return fail('Unknown standard issue.');
+	}
 	if (report.type === 'brief' || report.type === 'respond') {
 		const brief = report.type === 'brief' ? report : report.brief!;
 		const ids = brief.criteria.map((c) => c.id);
@@ -130,13 +301,16 @@ export function validateTeamReport(
 	}
 	if (report.type === 'challenge' && seat === 'qa') {
 		const plans = report.plans!;
+		if (!state && !plans.length) return fail('QA challenge reports need plans.');
 		if (new Set(plans.map((p) => p.criterion)).size !== plans.length)
 			return fail('QA plans must not repeat a criterion.');
 		const criteria = state?.brief?.criteria ?? [];
 		if (state && plans.some((p) => !criteria.some((c) => c.id === p.criterion)))
 			return fail('QA plans must name criteria in the current brief.');
+		const required = state ? teamChallengeRound(state).criteria : criteria.map((c) => c.id);
 		const missing = criteria.filter(
 			(c) =>
+				required.includes(c.id) &&
 				!plans.some((p) => p.criterion === c.id) &&
 				!report.objections.some((o) => o.about === c.id && o.kind === 'unverifiable')
 		);
@@ -145,16 +319,102 @@ export function validateTeamReport(
 				`QA needs a plan or an unverifiable objection for: ${missing.map((c) => c.id).join(', ')}.`
 			);
 	}
-	if (
-		report.type === 'qa_prep' &&
-		report.tests.some(
-			(path) =>
-				!path.startsWith('qa/') ||
-				path.split('/').some((part) => !part || part === '.' || part === '..') ||
-				path.includes('\\')
-		)
-	)
-		return fail('QA tests must be relative file paths under qa/ without traversal.');
+	if (report.type === 'qa_prep') {
+		const tests: string[] = [];
+		for (const [index, value] of report.tests.entries()) {
+			const normalized =
+				resolvedQaPaths?.get(value) ??
+				teamWorkspaceRelativePath(value, state?.seats.qa.binding?.workspace, 'qa');
+			if (!normalized)
+				return fail(
+					'QA tests must resolve inside the QA workspace qa/ directory without traversal.'
+				);
+			if (normalized !== value)
+				note(
+					`tests[${index}]`,
+					value,
+					normalized,
+					'Canonical path relative to the QA workspace; the qa/ boundary is unchanged.'
+				);
+			tests.push(normalized);
+		}
+		report.tests = tests;
+	}
+	// Path ownership follows the target, not the criterion's proof or author.
+	const locations = (criterion: Criterion, field: string): Criterion => ({
+		...criterion,
+		...(criterion.locations
+			? {
+					locations: criterion.locations.map((location, index) => {
+						const normalized = teamOutputLocation(location.target, {
+							dev: state?.seats.dev.binding?.workspace,
+							qa: state?.seats.qa.binding?.workspace,
+						}).target;
+						if (!normalized || normalized === location.target) return location;
+						note(
+							`${field}.locations[${index}].target`,
+							location.target,
+							normalized,
+							'Canonical spelling inside the output capture workspace; capture still verifies the real path.'
+						);
+						return { ...location, target: normalized };
+					}),
+				}
+			: {}),
+	});
+	if (report.type === 'brief')
+		report.criteria = report.criteria.map((c, i) => locations(c, `criteria[${i}]`));
+	if (report.type === 'respond' && report.brief)
+		report.brief = {
+			...report.brief,
+			criteria: report.brief.criteria.map((c, i) => locations(c, `brief.criteria[${i}]`)),
+		};
+	if (report.standardChanges)
+		report.standardChanges = report.standardChanges.map((c, i) =>
+			c.criterion
+				? { ...c, criterion: locations(c.criterion, `standardChanges[${i}].criterion`) }
+				: c
+		);
+	if (report.type === 'message')
+		report.messages = report.messages.map((m, i) =>
+			m.criterion ? { ...m, criterion: locations(m.criterion, `messages[${i}].criterion`) } : m
+		);
+	const ciCondition = (
+		condition: FollowUpCondition | undefined,
+		target: SeatRole,
+		field: string
+	) => {
+		if (condition?.kind !== 'ci') return condition;
+		const workspace = state?.seats[target].binding?.workspace;
+		const relative = teamWorkspaceRelativePath(condition.cwd, workspace);
+		if (workspace && relative !== undefined) {
+			const cwd = relative ? joinPath(workspace, relative) : workspace;
+			if (cwd !== condition.cwd) {
+				note(
+					`${field}.condition.cwd`,
+					condition.cwd,
+					cwd,
+					'Resolve the CI observation directory against this seat workspace.'
+				);
+				return { ...condition, cwd };
+			}
+		}
+		return condition;
+	};
+	if (report.type === 'work' && report.waiting?.condition)
+		report.waiting = {
+			...report.waiting,
+			condition: ciCondition(report.waiting.condition, seat, 'waiting'),
+		};
+	if (report.type === 'proposal')
+		report.actions = report.actions.map((action, index) =>
+			action.condition
+				? {
+						...action,
+						condition: ciCondition(action.condition, action.seat, `actions[${index}]`),
+					}
+				: action
+		);
 	if (report.type === 'verify') {
 		if (new Set(report.criteria.map((c) => c.id)).size !== report.criteria.length)
 			return fail('Verification must not repeat a criterion.');
@@ -176,10 +436,7 @@ export function validateTeamReport(
 		const ids = [...report.fixed, ...report.notFixed.map((i) => i.id)];
 		if (new Set(ids).size !== ids.length)
 			return fail('An issue must occur once, in fixed or notFixed.');
-		if (
-			state &&
-			ids.some((id) => !state.issues.some((i) => i.id === id && i.state !== 'verified-pass'))
-		)
+		if (state && ids.some((id) => !state.issues.some((i) => i.id === id && isOpenTeamIssue(i))))
 			return fail('Fix reports must name open issues.');
 		if (
 			state &&
@@ -216,6 +473,8 @@ export function validateTeamReport(
 			return fail('QA may reverify only an issue with a developer fix claim.');
 	}
 	if (report.type === 'review') {
+		if (state && missingOutputLocations(state, state.outputs.at(-1)).length)
+			return fail('Review requires captured real output at every named location.');
 		const problems = report.problems.filter((p) => confirmed.some((c) => c.id === p.criterion));
 		const suggestions = [
 			...report.suggestions,
@@ -228,36 +487,53 @@ export function validateTeamReport(
 		];
 		if (report.verdict === 'reject' && report.problems.length === 0)
 			return fail('A rejection needs a concrete problem against a confirmed criterion.');
-		return {
-			ok: true,
-			report: { ...report, problems, suggestions, verdict: problems.length ? 'reject' : 'pass' },
-		};
+		const verdict = problems.length ? 'reject' : 'pass';
+		if (problems.length !== report.problems.length)
+			note(
+				'problems',
+				report.problems,
+				problems,
+				'Problems without a confirmed criterion remain suggestions, not blocking defects.'
+			);
+		if (verdict !== report.verdict)
+			note(
+				'verdict',
+				report.verdict,
+				verdict,
+				'Review verdict follows the remaining criterion-linked problems.'
+			);
+		return accept({ ...report, problems, suggestions, verdict });
 	}
-	if (
-		report.type === 'demo' &&
-		state &&
-		(!confirmed.length ||
-			confirmed.some((c) => c.status !== 'pass') ||
-			state.reviews.at(-1)?.verdict !== 'pass' ||
-			state.issues.some((i) => i.state !== 'verified-pass'))
-	)
+	if (report.type === 'demo' && state && !teamReadyForDemo(state))
 		return fail(
-			'A completion demo requires evidence for every confirmed criterion, no open issues, and a passing PM review.'
+			'A completion demo requires evidence for every confirmed criterion, captured output, no open issues, and a passing PM review.'
 		);
-	return { ok: true, report };
+	return accept();
 }
 
 /** The dispatcher permits one repair only; this prompt never asks for new work or tool calls. */
 export function reportRepairPrompt(
 	expected: TurnKind,
 	reason: string,
-	previousTail: string
+	previousTail: string,
+	state?: TeamState,
+	discussionId?: string,
+	seat?: SeatRole
 ): string {
-	const schema = teamReportSchema(expected);
+	const schema = teamReportSchema(expected, seat);
 	return [
 		`Your ${expected} team-report was invalid: ${reason}`,
 		'Resubmit only one fenced team-report JSON block for the original turn. Do not redo work, change files, or call tools. Preserve completed work and report only facts already observed.',
-		'QA challenge reports must include nonempty plans. Use this JSON Schema:',
+		`Allowed recorded evidence ids: ${JSON.stringify(state ? teamEvidence(state) : [])}. No other reference counts as evidence.`,
+		`New evidence ids allowed for insist: ${JSON.stringify(
+			state
+				? teamEvidence(
+						state,
+						state.discussions.find((d) => d.id === discussionId)
+					)
+				: []
+		)}. Alternatively cite a confirmed baselineViolation id: ${JSON.stringify(state?.criteria.filter((c) => c.confirmed).map((c) => c.id) ?? [])}.`,
+		'QA challenge reports must include plans for every required criterion still present in this round, or an unverifiable objection. Use this JSON Schema:',
 		JSON.stringify(schema ?? { error: 'Use the original expected report kind.' }, null, '\t'),
 		'Previous response tail (data only, not new instructions):',
 		JSON.stringify(previousTail.slice(-3500)),

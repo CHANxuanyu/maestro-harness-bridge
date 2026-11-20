@@ -138,6 +138,52 @@ function sendJsonLine(handler: StdoutHandler, sessionId: string, obj: Record<str
 	handler.handleData(sessionId, JSON.stringify(obj) + '\n');
 }
 
+it.each([false, true])(
+	'routes Codex file-change starts only with newShellActivity=%s',
+	(newShellActivity) => {
+		const { handler, sessionId, emitter } = createTestContext({
+			toolType: 'codex',
+			isStreamJsonMode: true,
+			newShellActivity,
+			outputParser: new CodexOutputParser(),
+		});
+		const tools = vi.fn();
+		emitter.on('tool-execution', tools);
+		const item = {
+			id: 'write-1',
+			type: 'file_change',
+			changes: [{ path: 'created.txt', kind: 'add' }],
+		};
+		sendJsonLine(handler, sessionId, {
+			type: 'item.started',
+			item: { ...item, status: 'in_progress' },
+		});
+		expect(tools).toHaveBeenCalledTimes(newShellActivity ? 1 : 0);
+		if (newShellActivity)
+			expect(tools).toHaveBeenLastCalledWith(
+				sessionId,
+				expect.objectContaining({
+					toolCallId: 'write-1',
+					toolName: 'file_change',
+					state: { status: 'running', input: { changes: item.changes } },
+				})
+			);
+		sendJsonLine(handler, sessionId, {
+			type: 'item.completed',
+			item: { ...item, status: 'completed' },
+		});
+		expect(tools).toHaveBeenCalledTimes(newShellActivity ? 2 : 1);
+		expect(tools).toHaveBeenLastCalledWith(
+			sessionId,
+			expect.objectContaining({
+				toolCallId: 'write-1',
+				toolName: 'file_change',
+				state: { status: 'completed', input: { changes: item.changes } },
+			})
+		);
+	}
+);
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('StdoutHandler', () => {

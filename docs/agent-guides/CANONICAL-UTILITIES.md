@@ -24,7 +24,100 @@ undeliverable; a turn already delivered is not retroactively failed on deletion.
 cwd, file-change boundary and check-run identity for either shell. Do not infer
 completion from assistant text or build a second renderer timer for checks.
 
+**New-shell team renderer**
+
+`teamClient()` in `src/renderer/services/teamClient.ts` is the sole typed access
+to the real `window.maestro.team` preload contract, deriving wire types rather
+than redeclaring them. Absence disables creation and
+does not substitute a demonstration ledger. `useTeamStore` in
+`src/renderer/stores/teamStore.ts` subscribes before `list` / `get`, merges
+snapshot and incremental events by identity, and calls the shared `reduceLedger`.
+Each team retains its reduced reference until its ledger changes; commands wait
+for recorded events instead of fabricating acceptance, delivery or evidence.
+Connection lifetime is reference counted, late reads are discarded after
+disconnect, and one clock supplies deadline status to `useTeamStatus`.
+
+`buildProjectSessionTree()` in `src/renderer/utils/projectSessionTree.ts` assigns
+teams with the existing `projectHistoryScopeFor()` host/path membership. A team
+without an existing project contributes a normal project row using
+`projectPathKey()` in `src/renderer/utils/nativeConversationMatch.ts`, shared
+with conversation runners. Do not invent a runner or a separate team sidebar:
+the shell must mount its project sidebar even with zero conversations, and
+conversation filters must retain these projects. Terminal teams stay listed.
+The top-level new-conversation action remains present without a runner and
+opens the selected local team's project through the existing `openProject()`.
+
+`deriveTeamFeed()` in `src/renderer/components/Team/deriveTeamFeed.ts` groups
+events into chronological phase folds only. `OwnerCard` is shared across
+boundaries, takes unresolved cards from `state.openCards`, puts recommended
+choices first, and never offers a bare continue. Baseline edit/diff/return call
+the real backend handlers and preserve historical versions. `presentTeamOwnerCard()`
+in the client adapter separates legacy JSON checkpoint bodies from human text;
+new baseline cards carry readable `body` and structured `payload` separately.
+`presentTeamRecovery()` and `presentTeamWait()` in the same adapter map app
+recovery instructions and wait metadata into localized owner-facing copy. The
+feed, status strip and Progress tab share this projection; member-authored
+rationale stays content, while known application prose and workspace prefixes
+pass through `presentTeamText()`. Do not print recovery `how` or quota sampling
+reasons directly, and do not infer status by parsing member prose.
+Fixed baseline/acceptance checkpoints have no visible boundary label;
+escalations show it once, while retaining `data-boundary` attributes.
+Application `job:` / `job-retry:` follow-ups are bookkeeping, not feed messages.
+`TeamSummary` renders once from `state.terminal`, outside phase folds: the
+scheduler can end with `accepted` or `stopped` without a separate `terminal`
+event. It uses canonical replay statistics rather than counting rendered cards.
+`TeamModelCatalogProvider` shares account-scoped catalogs across seat tags on
+each surface using `useConversationModelCatalog()`. Historical tags keep their
+event model and use catalog display names, including hidden catalog entries;
+missing entries fall back to IDs. `modelEffortLevelName()` in
+`src/shared/modelCatalog.ts` shares vendor level vocabulary with the picker.
+`TeamPrimitives.tsx`
+owns theme mapping, seat tags, folds and criteria presentation for these surfaces.
+`TeamMemberView` uses `seatTranscript` plus `agentSessions.read` with
+`readOnly: true`, the locator's resolved `configDir`, and the existing
+`SessionMessagesView`; never add a team-specific
+transcript parser. `TeamOutput` shows ledger artifacts through existing image
+and Markdown components, using workspace-relative labels while retaining the
+original paths for reads. The team surface is not a modal; only setup and member
+views register Escape behavior. Team changes use `ChangesPanel.readOnlyScope`, sharing
+the Git reads and diff view while omitting write and review controls.
+The live demo renders the backend's acceptance boundary itself; its open
+acceptance card enables the demo action rather than blocking it or adding a
+second generic acceptance card. Other unresolved boundaries still block accept.
+
+`TeamDiscussion`, `TeamBaseline`, `TeamReview` and `TeamDecisions` in `src/renderer/components/Team/` project M2 records without another reducer. `teamPathLabel()` and `teamEvidenceLabel()` in `TeamPrimitives.tsx` resolve workspace-relative captions and evidence references. The M2 backend and UI scenarios share `prepareNativeTeamM2()` in `e2e/fixtures/native-team-m2.ts`; `nativeTeamScene()` keeps message-handling turns separate from the M1 scripted turn sequence.
+
+`prepareNativeTeam()` in `e2e/fixtures/native-team.ts` owns the synthetic three-seat
+scripts, isolated accounts, ledger reads and release gates shared by
+`e2e/native-team.spec.ts` and `e2e/native-team-ui.spec.ts`. The former tests CLI
+decisions and recovery; the latter creates externally with no open project,
+then uses real UI controls for both owner decisions and the composer. See
+[test commands and screenshot capture](TEST-PATTERNS.md#synthetic-team-acceptance).
+
 **Team chat shared layer**
+
+M3 recovery uses `sameTeamModel()`, `teamModelUnavailable()` and
+`teamRecoveryDecision()` in `src/shared/team/policy.ts`, over `decideNext()`.
+`teamQuotaSample()` in `src/main/team/quota.ts` reads existing account-specific
+quota snapshots through canonical account/environment resolution; it never calls
+a model to probe availability. Effort, turn kind and unrelated environment keys
+do not bypass an unavailable account/model. `tokenExhaustionResetAt()` accepts an
+explicit fallback timezone for a local provider's bare reset clock; remote clocks
+without a zone remain unknown. Do not add a scheduler-local reset parser.
+
+`TeamUsage.turns` counts actual dispatches, including failures and outstanding
+reservations; `budgetTurns` is its compatibility alias. Quota/login refusals count
+once toward the hard limit but never toward no-progress; do not add active seats
+a second time. Every invocation uses the scheduler's `dispatchAllowed()` guard.
+At the limit restart can reconcile receipts but cannot invoke another process.
+`createTeamScheduler()` owns 20-minute waits, 10-minute unchanged
+rechecks, the 30-second failure cooldown, one retry/report repair, PM report
+organization, and app-only native-result inspection after exhausted recovery.
+Persisted dispatch bindings and `workspace_inspected` receipts preserve the
+original model/account and interrupted effects. Publication uses
+`createTeamWorkspaces().pushDevWork()` / `.createDraftPr()`, with a selected project
+remote, stdin PR body, draft lookup on replay and durable action receipts. Never
+add a separate CLI executor or use the repository's release tooling here.
 
 `reduceLedger()` in `src/shared/team/ledger.ts` is the pure replay used by main,
 renderer, and CLI. It sorts by sequence, ignores unknown kinds and dangling
@@ -39,17 +132,109 @@ experience evidence must reference an app-captured output. The runtime owns
 validation and execution; this reducer does not execute work or append events.
 Baseline command canaries use `check_run.purpose: 'trial'` and never prove the
 delivered product. Review progress uses fresh QA evidence about previous review
-problems, never a change in the number or wording of PM comments.
+problems. Multiple problems on one criterion stay separate; omitting a comment
+does not close an unresolved issue. All review rounds still use `judgeAttempts()`.
 
 `extractTeamReport()`, `validateTeamReport()`, and `reportRepairPrompt()` in
 `src/shared/team/report.ts` share `REPORT_SCHEMAS` and `teamReportSchema()` from
 `src/shared/team/schemas.ts` with `buildTeamTurnPrompt()` and `TEAM_TURN_PROMPTS`
 in `src/shared/team/prompts.ts`. The existing Markdown parser finds real report
 fences; do not extract JSON from arbitrary prose or from a quoted example.
-Unknown fields are rejected, QA challenge plans are mandatory, and review
+Known fields owned by another seat are dropped with `report_normalized` notes;
+other unknown fields are rejected. `teamReportSchema()` projects the same schema
+for prompts and repairs, omitting fields the seat cannot set and the app-owned
+proposal decider. Validation uses the full schema after normalization. Scheduler
+receipts persist normalized reports and notes together; stable event ids replay
+the note once after interrupted ingestion. Never add a second parser or normalize
+only in a UI/CLI entry point. QA challenge plans cover the current round's
+required criteria (or explicit unverifiable objections), and review
 problems without a confirmed criterion become suggestions. Without state, no
 review criterion is assumed confirmed. The dispatcher must permit only one
 repair, passing the original turn kind; repair does not redo work.
+
+`teamWorkspaceRelativePath()` in `src/shared/team/policy.ts` shares lexical
+workspace spelling over `normalizeWorktreePath()` / `isPathAtOrUnderRoot()`.
+It rejects traversal and supports owned absolute paths and harmless dot segments;
+it does not prove that a file exists or follows an allowed symlink.
+`createTeamWorkspaces().resolveQaTestPath()` performs that physical QA boundary
+check and resolves a bare name only for an unambiguous existing `qa/` file.
+`teamOutputLocation()` in that shared policy selects QA for `qa/...` and owned
+absolute QA test paths, dev for other file targets. Normalization and capture
+share this routing, independent of the criterion's proof or author. Explicit
+absolute paths retain their workspace identity after normalization.
+Existing `captureTeamOutput()` remains the proof
+gate. Do not normalize a path into an evidence claim or bypass role permissions.
+
+`baselineDiff()`, `discussionDecider()`, `topicRejection()`, `pmMayChange()`,
+`referenceVotes()`, `missingOutputLocations()`, `teamReadyForDemo()` and
+`isOpenTeamIssue()` in `src/shared/team/policy.ts` own the M2 policy. Do not add
+renderer versions of these gates. A superseded issue preserves the failed
+history; it is not a verified fix. Topic positions use fresh native contexts
+and are omitted from other seats' prompts until response time. The main-owned
+conclusion creates the work items and registered waits.
+
+`teamChallengeRound()` in that policy module derives one full challenge plus at
+most one round on the first PM revision's changed criteria. Only owner edits or
+returns start another full cycle. Share it between scheduling, prompts and QA
+plan validation. `teamEvidenceCatalog()` supplies ids and one-line descriptions;
+`teamEvidence(state, discussion?)` optionally limits them to new discussion
+evidence. Unknown topic/position/response references are retained as `unverifiedBasis`
+by `reportEvents()`, never as observations. Unsupported insistence becomes a
+recorded reservation for the lawful decider, not a failed member report. Repair
+prompts use the original dispatch snapshot's exact allowed ids.
+
+`teamWaitRejection()` in `src/shared/team/policy.ts` is the shared wait-ownership
+check. Discussion/seat steps and app checks cannot become external timer waits;
+explicit member `needs` remains app work. Command/CI/time conditions share one
+schema for work and conclusion actions. The scheduler uses this gate at
+registration and when reconciling legacy/fired waits, recording cancellation and
+an app observation without a repair turn. Unknown prose cannot establish an
+external wait. Its ten-minute stall observation uses substantive facts, not poll
+bookkeeping, and does not retry a failed assignment or spend past the budget.
+Held availability failures use `resumedFrom` so later wait turns cannot hide them;
+resumed work inspects the workspace and preserves its assignment context.
+
+`teamTurnPermission()` in that same policy module is the execution permission
+allowlist shared by prompts, scheduler requests and the native turn dispatcher.
+Only dev `work`/`fix` and QA `qa_prep`/`reverify` can write; QA's existing boundary
+restoration still confines those writes to `qa/`. Every other turn, including
+challenge, discussion, verification and report repair, is read-only. PM is
+always read-only. Do not infer permission from the seat alone.
+
+`captureTeamOutput()` in `src/main/team/output-capture.ts` preserves immutable
+files and every declared location receipt. It uses `captureWebContentsPage()`
+in `src/main/utils/capture-page.ts`, the same compositor path as the window
+capture IPC, after two animation frames with bounded loading and capture.
+Receipts name the source workspace and resolved path. Captured bytes are stored
+under workspace and content hash, so a QA edit at the same dev revision never
+reuses an older file. Missing viewers and files produce app-owned
+`output_observation` events at the review gate, never standard issues for PM.
+The scheduler refreshes after QA writes or after a new verification when a
+location is missing; a successful read-only verification needs no redundant
+capture. Unresolved observations retry on a changed condition or after 10 minutes
+without a model turn. Status
+and budget reports expose the observation while the review proof gate stays shut.
+`checkTestCounts()` and `checkCommandBoundary()` in `src/shared/checkRun.ts`
+share observed runner counts and explicit check boundaries. Unknown counts
+remain unknown. Boundary declarations and recognized shell actions require a
+per-invocation card; this is not an operating-system sandbox for script contents.
+`getModelFamily()` now lives in `src/shared/modelFamily.ts`; the renderer path
+re-exports it. Reference votes group same-vendor models through that utility.
+
+`teamEventForTransport()` in `src/shared/team/ledger.ts` is the shared default
+read/delta projection. It omits inline prompts and repair tails, and uses
+`compactToolOutput()` for reply, assignment-note and check-output previews.
+Never truncate criteria, reports, evidence ids or decisions to fit transport.
+Report errors, rejection reasons, normalization notes and fault details also
+remain intact. `createTeamScheduler().events(id)` / `team show events` is the exact append-log audit,
+including raw repair text and legacy inline prompts, without loading sidecars.
+`createTeamStore().writePrompt()` / `readPrompt()` own immutable per-dispatch
+sidecars under `teams/<id>/prompts/`. Write and fsync the sidecar before the
+reference-bearing dispatch event; retain `promptDigest`. The scheduler checks
+the digest for explicit audit reads and dispatch. `get(id, true)`, `prompt(id,
+dispatchId)`, `log()` and `export()` opt into audit text; ordinary `get()` and
+`team:changed` do not. Restart receipt matching uses the frozen seat identity and
+dispatch marker, not prompt loading. Preserve old inline prompts on read.
 
 `teamReplyMessage()` in that same module uses the canonical Markdown parser to
 remove report fences and bound visible replies. `reportEvents()` in
@@ -66,13 +251,23 @@ revision, including untracked files, so staging or committing alone cannot
 manufacture a new fix. The scheduler combines it with failing signatures for
 `decideNext()`; new check row IDs alone do not count as progress.
 
+Member execution failures use a separate durable recovery latch, not the
+product-progress loop. One same-turn retry is allowed; a fresh UUID, fallback
+wake, incidental ledger append or restart cannot grant another. Existing
+duplicate roots count as attempts too. A later member recovery or owner answer
+can restart the assignment; a different kind also needs a changed assignment
+basis. A held member fault appears in app/CLI status instead of waking PM in a
+loop. Model takeover remains a separate M3 responsibility.
+
 Domain events project requirements, work, issues, reviews, and decisions.
 `report_accepted` preserves the report and contributes QA verdicts, but does not
 also invent domain events. This avoids double-counting the subsequent recorded
 actions. App-generated verdict events may carry `actor: 'app'`; member-authored
 ones must have the appropriate actor. To count one owner decision that has both
 a `card_answered` and a semantic event, propagate `cardId` to that semantic
-event. Recovery statistics count explicit `member_recovered` events; bindings
+event. Owner messages count logical message IDs regardless of delivery; wake-ups
+count distinct dispatched wake turns, and substitutions count takeover events.
+Recovery statistics count explicit `member_recovered` events; bindings
 describe where and under which model a seat runs. Additions in `standard_change`
 carry a complete `criterion`, including its proof method. All attempts and the
 review loop use `judgeAttempts()` and `decideNext()` in `src/shared/progressRules.ts`.
@@ -87,6 +282,10 @@ replay itself never reads the clock. Time formatting uses `src/shared/duration.t
 and token/cost formatting uses `src/shared/formatters.ts`. Prompts omit transcripts
 and private workspace bindings, isolate challenges, bound recent attempt details,
 and include all standard changes and contested decisions in the demo slice.
+
+- **New-shell model picker:** `ModelEffortPicker` in `src/renderer/components/ModelEffortPicker.tsx` owns the single pill, anchored layer, model-specific efforts, keyboard navigation and quota readout. Its `policy` is `conversation` or `team-seat`; team policy is applied before restoring remembered levels, including when the vendor default itself is Ultra. The composer adapter uses `useConversationModelCatalog()` in `src/renderer/hooks/agent/useAgentModelEffortOptions.ts` to warm the main-process cache once on mount and recheck file fingerprints on open, never on streaming renders. `tabStore.setTabModelEffort()` writes both overrides and `AITab.modelEfforts` atomically, partitioned by the catalog's opaque `accountKey`. `NATIVE_MODEL_DEFAULT` in `src/shared/modelCatalog.ts` distinguishes following native CLI configuration from clearing an override to inherit Maestro configuration; both exec and Codex app-server omit that override, and transcript ingestion omits the marker instead of presenting it as a known model. Keep `resolveModelEffort()` as the display override ladder. The classic shell's empty/inherited values retain their existing meaning. Do not copy the picker for team seats or add a second effort-memory store.
+
+- **Provider model catalogs and picker state:** `createModelCatalogService()` in `src/main/agents/model-catalog.ts` reads the effective account via `resolveAgentAccountDir()` and provider profiles. UI and `models <provider>` share `agents:getModelCatalog`; catalog and native config file revisions invalidate the bounded cache without a TTL. `parseCodexConfig()` in `src/main/agents/codex-config.ts` also serves the output parser, so an unrelated TOML table cannot become the default model. `visibleCatalogModels()`, `effortsForModel()`, `isEffortSupported()`, `resolveFollowDefault()`, `rememberEffortPerModel()`, `rememberedEffortForModel()` and `teamSeatEfforts()` in `src/shared/modelCatalog.ts` retain model-specific capabilities and defaults. Never union effort levels for an authoritative catalog, infer Claude legacy status from a model name, or delete Ultra from vendor data to implement team policy. `cachedModelCatalogQuota()` reads retained usage stores and `summarizeQuotaWindows()` projects remaining percentages, without sampling. Keep missing quota undefined, mark retained old samples stale, and never substitute local quota for an SSH account. See [the frontend contract](../round2/dev/model-catalog-api.md) for fallback, default provenance and limitations.
 
 - **On-demand native tool results:** `readToolOutputFile()` in `src/main/storage/native-tool-output.ts` runs `readNativeToolOutput()` in a disposable worker. Use `agentSessions:toolOutput` from UI and CLI so owner account selection, the 100 MiB native read cap, 2 MiB UTF-8 tail and read-only behavior stay shared. `codexToolOutputText()` in `src/shared/codexToolOutput.ts` is the native text decoder; the storage wrapper still applies `compactToolOutput()`. Claude uses `flattenToolResultContent(content, false)` only inside the bounded worker. Full text never enters session state. Do not add a second transcript parser or full-output persistence path.
 
@@ -601,7 +800,17 @@ Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保
 `foldTurnActivity()`, `summarizeTurnActivity()` and `turnActivityOutcome()` in
 `src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts` own the new
 shell's running and completed activity projection. Keep classic callers opted
-out. Count only top-level tool calls, use `latestAgentTaskList()` for reported
+out. `createTurnActivityFolder()` in the same module caches each turn by its
+user entry, boundary length, entry identities and presentation state. A streamed
+chunk rebuilds only the changed turn; historical edits and late completion or
+delivery updates invalidate their own turn. Pair it with
+`createAiResponseCollapse()` in `TerminalOutput/utils/collapseAiResponseLogs.ts`
+so unchanged merged replies retain their identity before folding. Both caches
+belong to the mounted conversation and use weak keys; never cache by ids or
+first/last entries alone. Finished activity arrays, plans and delivery objects
+stay stable for the row memos. The flat list still checks entry identities to
+detect corrections; this is not an append-only transcript assumption.
+Count only top-level tool calls, use `latestAgentTaskList()` for reported
 plans, and use `isProgressNoteEntry()` for public narration. A failed step does
 not determine the turn outcome. `toolExitCode()` in `renderer/utils/logEntries.ts`
 reads explicit provider codes without inventing one for generic failures.
@@ -617,12 +826,27 @@ failing step is located only within that turn, never borrowed from earlier work.
 With no steps, the localized summary reads `Failed: <reason>`; the duration and
 step-count wording is reserved for turns with steps. The reason stays on one line.
 Auth errors retain the localized sign-in explanation rather than exposing raw
-provider rejection text beside the existing sign-in card.
+provider rejection text beside the existing sign-in card. The fold button's
+accessible name describes expanding activity; it must not impersonate that card's
+sign-in action. Keep the latest answer visible while the process is still busy:
+provider output and process exit are separate events, including gated fixtures.
 
 `beginGitTurn()`, `recordGitTurnTool()` and `finishGitTurn()` extend
-`src/main/git-changes.ts`. Capture bounded dirty patches before spawn, retain
-only write paths and statuses while running, and consume the boundary before
-forwarding process exit. `collectTurnWrites()` remains the write-evidence rule;
+`src/main/git-changes.ts`. Start dirty-patch capture before spawn without awaiting
+it. Startup stdout does not invalidate capture. Buffer early `Write` and Codex
+add-only `file_change` starts; accept their baseline only if a bounded read-only
+probe still finds every target absent. Codex start/update normalization marks
+this extra evidence `newShellActivityOnly`; classic dispatch ignores it.
+Existing targets, edits, commands, tool
+completion and exit seal an unresolved baseline rather than count uncertain
+pre-existing content. Retain only write paths and statuses while running. Consume the boundary at exit,
+but forward exit immediately: optional measurement must never hold Stop or queue
+drain. Each capture has the canonical read-only Git timeout as a total budget.
+All SSH reads use `execGitReadOnly()` with the remote cwd. A new turn invalidates
+unfinished measurement so its writes cannot enter the preceding turn's totals.
+`process:turn-delivery` carries late totals with the token from `process:exit`;
+the renderer matches that token to the completed user entry, never the latest one.
+Failed or late capture leaves live delivery absent. `collectTurnWrites()` remains the write-evidence rule;
 `summarizeTurnDelivery()` in `src/shared/gitChangeTurns.ts` preserves unknown
 counts. Never substitute the current HEAD diff for this boundary comparison.
 Snapshots stay in main memory; only totals and paths enter `LogEntry.turnCompletion`
@@ -637,3 +861,15 @@ be separated by workspace boundaries.
 continues to show current file diffs, clearly separate from the frozen turn
 counts on the delivery bar. The optional check-result slot stays absent until
 F3 supplies evidence for the same turn.
+
+`agentTaskListEmptyState()` in `renderer/utils/agentTaskList.ts` shares the
+localized title and provider/model explanation between TasksPanel and the CLI.
+The CLI's `emptyText` joins those same two lines with a newline.
+
+## New shell conversation titles and elapsed counters
+
+`conversationDisplayTitle(tab, true)` in `src/renderer/utils/conversationTitle.ts` is the plain-text source for both the new shell header and open sidebar rows. It reuses `stripMarkdown`, keeps the distinguishing end of first-message titles, and never writes the cleaned title to native history. The classic default retains its existing formatting and excerpt limit. Open new-shell rows must not substitute a separately scanned history title over this source.
+
+`fitConversationTitle(title, peers, width, measure)` in that file fits both ends to the measured label track. If peer labels collide, it reveals the distinguishing prefix boundary instead. Pass `useElementWidth` and `measureTextWidth` with the resolved font, not a character count guessed from sidebar width. Keep the full canonical title in the tooltip. Identical full titles cannot become different without inventing a name.
+
+`steppedElapsedTime()` and `formatSteppedElapsed()` in `src/shared/duration.ts` define running counter boundaries: initial localized text below ten seconds, ten-second steps below one minute, then minute steps. `ElapsedTimeDisplay` schedules its next wake at that boundary and retains sleep-aware elapsed accounting and paused Auto Run behavior. It gates the new cadence by the shell setting; classic callers retain their formatter and second cadence. Do not add another per-second timer just to format its value less often.

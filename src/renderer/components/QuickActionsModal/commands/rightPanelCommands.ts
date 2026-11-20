@@ -58,6 +58,15 @@ export function buildRightPanelCommands({
 	];
 
 	if (newShell) {
+		commands.push({
+			id: 'createTeam',
+			label: t('workflows.team.new'),
+			shortcut: useSettingsStore.getState().shortcuts.createTeam,
+			action: () => {
+				openUiSurface('create-team');
+				setQuickActionOpen(false);
+			},
+		});
 		for (const [id, surface, label, shortcut] of [
 			[
 				'goToChecks',

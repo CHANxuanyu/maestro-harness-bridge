@@ -11,8 +11,20 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 	const waitingFor = state.followUps.map(
 		(wait) => `${wait.seat}: ${wait.waitFor} (${wait.reason})`
 	);
+	const outputObservations = state.outputObservations.filter(
+		(observation) => observation.outputId === state.outputs.at(-1)?.outputId
+	);
+	const appObservations = [...outputObservations, ...state.appObservations];
+	for (const observation of outputObservations)
+		waitingFor.push(
+			`App output capture: ${observation.missing.join('; ')}. App will recheck at ${new Date(observation.retryAt).toISOString()}; confirmed criteria are unchanged.`
+		);
+	for (const observation of state.appObservations.slice(-3))
+		waitingFor.push(`App observation: ${observation.detail}`);
 	for (const seat of SEAT_ROLES) {
 		const health = state.seats[seat];
+		if (health.faultActive && !health.takeover)
+			waitingFor.push(`${seat}: recovery from ${health.lastFault?.fault ?? 'member fault'}`);
 		if (health.quota && !health.takeover)
 			waitingFor.push(
 				`${seat}: quota recovery${health.quota.resetsAt === undefined ? '' : ` at ${new Date(health.quota.resetsAt).toISOString()}`}`
@@ -35,6 +47,8 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 	}
 	return {
 		generatedBy: 'app',
+		appObservations,
+		wrapUp: state.wrapUp,
 		title: state.config?.title ?? 'Team',
 		phase: state.phase,
 		paused: state.paused,
@@ -64,7 +78,9 @@ export function teamStatus(state: TeamState, now: number): TeamStatusView {
 				seat,
 				status:
 					health.faultActive && !health.takeover
-						? 'fault'
+						? health.lastFault?.fault === 'model-unavailable'
+							? 'waiting'
+							: 'fault'
 						: health.activeDispatchIds.length
 							? 'working'
 							: (health.quota && !health.takeover) || state.followUps.some((f) => f.seat === seat)
@@ -102,6 +118,12 @@ export function formatTeamStatus(view: TeamStatusView): string {
 		`Criteria with passing evidence: ${view.criteria.withEvidence}/${view.criteria.total}`,
 		...view.criteria.missing.map((c) => `  ${line(c.id)} [${c.status}]: ${line(c.reason)}`),
 		...(view.criteria.total === 0 ? ['  No confirmed baseline.'] : []),
+		...(view.wrapUp
+			? [
+					`Wrap-up plan (informational): ${line(view.wrapUp.summary)}`,
+					...view.wrapUp.priorities.map((p) => `  ${line(p)}`),
+				]
+			: []),
 		'Open work items:',
 		...(view.openWorkItems.length
 			? view.openWorkItems.map(

@@ -4,6 +4,7 @@ import type {
 	LedgerEvent,
 	TeamStatusView,
 	SeatRole,
+	QueuedTeamMessage,
 } from '../shared/team/types';
 import type { ConversationPermissionSnapshot } from '../shared/window-types';
 import type { NewTabResult, NewAITabWithPromptResult } from '../main/web-server/types';
@@ -243,14 +244,27 @@ interface MaestroAPI {
 		create(input: CreateTeamInput): Promise<TeamConfig>;
 		/** Includes active, paused and terminal team configurations. */
 		list(): Promise<TeamConfig[]>;
-		/** Durable replay source. Null means unknown team. Events are ordered by seq. */
-		get(teamId: string): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null>;
+		/** Replay facts, ordered by seq. Full audit payloads require full=true. */
+		get(
+			teamId: string,
+			full?: boolean
+		): Promise<{ config: TeamConfig; events: LedgerEvent[] } | null>;
+		/** Exact assignment from a sidecar or legacy inline dispatch. */
+		prompt: ReturnType<typeof import('../main/preload/team').createTeamApi>['prompt'];
+		/** Exact append-log audit, including stored raw repair text and legacy inline prompts. */
+		events: ReturnType<typeof import('../main/preload/team').createTeamApi>['events'];
 		/** App-generated evidence, waits, cards, seat health and budget. */
 		status(teamId: string): Promise<TeamStatusView | null>;
 		/** Answer an exact open card/option. Return/change options require a nonempty note. */
 		answer(teamId: string, cardId: string, optionId: string, note?: string): Promise<void>;
-		/** M1 queues every owner message for the PM's next turn; a requested recipient is preserved in text. */
-		say(teamId: string, text: string, to?: SeatRole): Promise<void>;
+		baselineEdit: ReturnType<typeof import('../main/preload/team').createTeamApi>['baselineEdit'];
+		baselineDiff: ReturnType<typeof import('../main/preload/team').createTeamApi>['baselineDiff'];
+		baselineReturn: ReturnType<
+			typeof import('../main/preload/team').createTeamApi
+		>['baselineReturn'];
+		log: ReturnType<typeof import('../main/preload/team').createTeamApi>['log'];
+		/** Targets one seat, queued after its current turn. PM records owner requirements. */
+		say(teamId: string, text: string, to?: SeatRole): Promise<QueuedTeamMessage>;
 		/** Stops new scheduling; current turns finish and their results are retained. */
 		pause(teamId: string): Promise<void>;
 		/** Resumes automatically from durable ledger state. */
@@ -258,20 +272,23 @@ interface MaestroAPI {
 		/** Cancels active work, retaining branch and ledger. */
 		stop(teamId: string): Promise<void>;
 		/** Answers the current acceptance card; refuses incomplete results. */
-		accept(teamId: string): Promise<void>;
+		accept(teamId: string, withGaps?: boolean): Promise<void>;
+		extend: ReturnType<typeof import('../main/preload/team').createTeamApi>['extend'];
+		seatSet: ReturnType<typeof import('../main/preload/team').createTeamApi>['seatSet'];
+		assignResidual: ReturnType<
+			typeof import('../main/preload/team').createTeamApi
+		>['assignResidual'];
+		seatSub: ReturnType<typeof import('../main/preload/team').createTeamApi>['seatSub'];
+		action: ReturnType<typeof import('../main/preload/team').createTeamApi>['action'];
 		/** Returns the current demonstration to implementation with the owner's exact note. */
 		requestChanges(teamId: string, note: string): Promise<void>;
-		/** JSON text containing the same config and events as get(). No save dialog. */
+		/** JSON text containing config, unabridged events and prompts keyed by dispatch id. */
 		export(teamId: string): Promise<string>;
 		/** Native-history locator for existing agentSessions reads. Null before a seat is bound. */
 		seatTranscript(
 			teamId: string,
 			seat: SeatRole
-		): Promise<{
-			provider: import('../shared/agentIds').AgentId;
-			nativeSessionId?: string;
-			cwd: string;
-		} | null>;
+		): Promise<import('../shared/team/types').TeamSeatTranscript | null>;
 		/** Emitted after every durable append. Subscribe before get(), then deduplicate by event.id/seq. */
 		onChanged(listener: (payload: { teamId: string; event: LedgerEvent }) => void): () => void;
 	};
@@ -469,6 +486,9 @@ interface MaestroAPI {
 		onExit: ReturnType<
 			typeof import('../main/preload/process/core').createProcessCoreApi
 		>['onExit'];
+		onTurnDelivery: ReturnType<
+			typeof import('../main/preload/process/core').createProcessCoreApi
+		>['onTurnDelivery'];
 		steer: ReturnType<typeof import('../main/preload/process/core').createProcessCoreApi>['steer'];
 		onPermissionResolved: ReturnType<
 			typeof import('../main/preload/process/core').createProcessCoreApi
@@ -1900,6 +1920,7 @@ interface MaestroAPI {
 	};
 	agents: {
 		getNativeCommands: import('../main/preload/agents').AgentsApi['getNativeCommands'];
+		getModelCatalog: import('../main/preload/agents').AgentsApi['getModelCatalog'];
 		getPresets: import('../main/preload/agents').AgentsApi['getPresets'];
 		prepareDeepSeekPreset: import('../main/preload/agents').AgentsApi['prepareDeepSeekPreset'];
 		detect: (sshRemoteId?: string) => Promise<AgentConfig[]>;

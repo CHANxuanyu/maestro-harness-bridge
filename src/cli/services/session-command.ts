@@ -50,9 +50,8 @@ export function errorFrameMessage(reply: unknown): string | null {
 export function failCommand(message: string, json?: boolean): never {
 	if (json) {
 		console.log(JSON.stringify({ success: false, error: message }));
-	} else {
-		console.error(formatError(message));
 	}
+	console.error(formatError(message));
 	return process.exit(1);
 }
 

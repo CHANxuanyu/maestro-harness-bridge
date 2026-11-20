@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef } from 'react';
+import React, { memo, useEffect, useId, useMemo, useRef } from 'react';
 import { shallow } from 'zustand/shallow';
 import { ChevronRight } from 'lucide-react';
 import type { Theme } from '../../../types';
@@ -49,6 +49,7 @@ export function TurnActivityFold({
 	children?: React.ReactNode;
 }) {
 	const t = useT();
+	const problemId = useId();
 	const summary = useMemo(() => summarizeTurnActivity(activity.entries), [activity.entries]);
 	const wasRunning = useRef(activity.running);
 	const detailRef = useRef<HTMLDivElement>(null);
@@ -115,6 +116,17 @@ export function TurnActivityFold({
 						type="button"
 						onClick={() => onToggle(`turn:${hostId}`)}
 						aria-expanded={open}
+						aria-label={
+							newShell
+								? t(
+										open
+											? 'workflows.transcript.hideTurnActivity'
+											: 'workflows.transcript.showTurnActivity'
+									)
+								: undefined
+						}
+						data-activity-state={newShell ? activity.status : undefined}
+						aria-describedby={newShell && problem ? problemId : undefined}
 						title={
 							open
 								? t('workflows.transcript.hideTurnActivity')
@@ -146,6 +158,7 @@ export function TurnActivityFold({
 						{problem && !failedBeforeSteps && ' '}
 						{problem && (
 							<span
+								id={newShell ? problemId : undefined}
 								data-tool-status={activity.status}
 								className={newShell ? 'min-w-0 truncate' : undefined}
 							>
@@ -212,6 +225,7 @@ export const MemoizedTurnActivityFold = memo(TurnActivityFold, (prev, next) => {
 		return false;
 	const onlyRunningBar = prev.newShell && prev.activity.running && !prev.open;
 	if (!onlyRunningBar && prev.activity.durationMs !== next.activity.durationMs) return false;
+	if (prev.activity.entries === next.activity.entries) return true;
 	const previousEntries = onlyRunningBar
 		? prev.activity.entries.filter((entry) => entry.source === 'tool' || isProgressNoteEntry(entry))
 		: prev.activity.entries;

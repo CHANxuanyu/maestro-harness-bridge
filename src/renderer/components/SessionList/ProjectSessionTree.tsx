@@ -1,4 +1,6 @@
 import { ConversationWaitingBadge } from '../ConversationCheckDelivery';
+import { openUiSurface } from '../../utils/openUiSurface';
+import { TeamSidebar } from '../Team/TeamSidebar';
 import { usePermissionRequestStore } from '../../stores/permissionRequestStore';
 import { requestConversationAction } from '../../services/conversationArchive';
 
@@ -9,6 +11,9 @@ import type {
 import { highlightMatches } from '../../utils/highlightMatches';
 import { useNewConversationTools, newShellConversation } from '../../services/newShellConversation';
 import { chooseProject } from '../../services/openProject';
+import { fitConversationTitle } from '../../utils/conversationTitle';
+import { useElementWidth } from '../../hooks/ui/useElementWidth';
+import { measureTextWidth } from '../../utils/measureTextWidth';
 import { Spinner } from '../ui/Spinner';
 /**
  * ProjectSessionTree - the Left Bar's conversation-first navigation.
@@ -30,6 +35,7 @@ import { Spinner } from '../ui/Spinner';
 
 import {
 	memo,
+	useMemo,
 	useCallback,
 	useEffect,
 	useId,
@@ -38,6 +44,7 @@ import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
+	type CSSProperties,
 	type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -428,6 +435,7 @@ const StatusMark = memo(function StatusMark({
 });
 
 interface ConversationRowProps {
+	peers: SidebarConversation[];
 	theme: Theme;
 	conversation: SidebarConversation;
 	depth: number;
@@ -458,6 +466,7 @@ function findConversation(
 }
 
 const ConversationRow = memo(function ConversationRow({
+	peers,
 	theme,
 	conversation,
 	depth,
@@ -489,7 +498,19 @@ const ConversationRow = memo(function ConversationRow({
 			onSetChildrenExpanded?.(conversation, true);
 	}, [newShell, searching, forceExpanded, conversation, onSetChildrenExpanded]);
 	const title = conversationTitle(conversation, t, newShell);
-	const worktree = conversation.history?.worktree;
+	const titleRef = useRef<HTMLSpanElement>(null);
+	const titleWidth = useElementWidth(titleRef, newShell);
+	const visibleTitle = useMemo(() => {
+		if (!newShell || !titleRef.current || !titleWidth) return title;
+		const style = getComputedStyle(titleRef.current);
+		return fitConversationTitle(
+			title,
+			peers.map((peer) => conversationTitle(peer, t, true)),
+			titleWidth,
+			(text) => measureTextWidth(text, style.font, parseFloat(style.letterSpacing) || 0)
+		);
+	}, [newShell, title, titleWidth, peers, t]);
+	const worktree = (newShell && conversation.worktree) || conversation.history?.worktree;
 	const isOpen = conversation.kind === 'open';
 	const hasMenu = isOpen || (newShell && !!conversation.nativeSessionId);
 	const indent = 4 + depth * DEPTH_INDENT + 16;
@@ -592,24 +613,36 @@ const ConversationRow = memo(function ConversationRow({
 						agentName={conversation.agentName}
 					/>
 					<span
+						ref={titleRef}
+						data-conversation-title={newShell ? title : undefined}
 						className="truncate flex-1 min-w-0"
+						aria-hidden={visibleTitle !== title || undefined}
 						title={
-							conversation.nativeTitle
-								? `${title}\n${conversation.nativeTitle}`
-								: conversation.history?.preview || title
+							newShell
+								? title
+								: conversation.nativeTitle
+									? `${title}\n${conversation.nativeTitle}`
+									: conversation.history?.preview || title
 						}
 					>
-						{title}
+						{visibleTitle}
 					</span>
+					{/* A middle-shortened title is for the eye only; assistive tech and
+					    text search still get the whole title. */}
+					{visibleTitle !== title && <span className="sr-only">{title}</span>}
 					{newShell && conversation.ownerId && conversation.tabId && (
 						<ConversationWaitingBadge sessionId={conversation.ownerId} tabId={conversation.tabId} />
 					)}
 					{worktree && (
 						// Where the conversation ran, kept quieter than its title: the
-						// folder name is short, the branch and full path wait in the hover.
+						// new shell keeps only the marker; branch and path wait in the hover.
 						<span
 							data-worktree
-							className="shrink min-w-0 max-w-[7rem] flex items-center gap-0.5 text-2xs"
+							className={
+								newShell
+									? 'shrink-0 flex items-center'
+									: 'shrink min-w-0 max-w-[7rem] flex items-center gap-0.5 text-2xs'
+							}
 							style={{
 								color: theme.colors.textDim,
 								opacity: worktree.missing ? 0.6 : undefined,
@@ -634,7 +667,7 @@ const ConversationRow = memo(function ConversationRow({
 								.join('\n')}
 						>
 							<GitBranch aria-hidden className="w-3 h-3 shrink-0" />
-							<span className="truncate">{worktree.name || worktree.branch}</span>
+							{!newShell && <span className="truncate">{worktree.name || worktree.branch}</span>}
 						</span>
 					)}
 					{conversation.starred && (
@@ -718,6 +751,7 @@ const ConversationRow = memo(function ConversationRow({
 							key={child.key}
 							theme={theme}
 							conversation={child}
+							peers={children!}
 							depth={depth + 1}
 							activeKey={activeKey}
 							openMenuState={openMenuState}
@@ -835,7 +869,7 @@ const ProjectSection = memo(function ProjectSection({
 	// state is left alone so clearing the search restores the user's layout.
 	const expanded = searching || !project.collapsed;
 	// Conversations, not configurations: every matching row, paged or not.
-	const count = project.totalCount;
+	const count = project.totalCount + (project.teams?.length ?? 0);
 	const rowIndent = 4 + project.depth * DEPTH_INDENT + 16;
 	const newMenuOpen = openMenuState?.kind === 'new' && openMenuState.key === project.key;
 	const projectMenuOpen = openMenuState?.kind === 'project' && openMenuState.key === project.key;
@@ -872,7 +906,7 @@ const ProjectSection = memo(function ProjectSection({
 	const showLoading = expanded && count === 0 && !searching && historyLoading;
 
 	return (
-		<li>
+		<li data-project-key={project.key}>
 			<div
 				className="group flex items-center gap-0.5 pr-1"
 				style={{ paddingLeft: 4 + project.depth * DEPTH_INDENT }}
@@ -959,11 +993,17 @@ const ProjectSection = memo(function ProjectSection({
 			</div>
 			{expanded && (
 				<ul id={listId} className="flex flex-col">
+					{newShell && !!project.teams?.length && (
+						<li>
+							<TeamSidebar theme={theme} teams={project.teams} />
+						</li>
+					)}
 					{project.conversations.map((conversation) => (
 						<ConversationRow
 							key={conversation.key}
 							theme={theme}
 							conversation={conversation}
+							peers={project.conversations}
 							depth={project.depth}
 							activeKey={activeKey}
 							openMenuState={openMenuState}
@@ -1462,7 +1502,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		if (menu && !menuSections) setMenu(null);
 	}, [menu, menuSections]);
 
-	const totalConversations = projects.reduce((sum, p) => sum + p.totalCount, 0);
+	const totalRows = projects.reduce((sum, p) => sum + p.totalCount + (p.teams?.length ?? 0), 0);
 	const filtering = searching || !!providerFilter;
 	const providerOptions =
 		providers.length > 1
@@ -1486,8 +1526,12 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 		<button
 			type="button"
 			onClick={onNewConversationHere}
-			className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-white/10"
-			style={{ color: theme.colors.textMain }}
+			className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${newShell ? 'w-full min-w-0 font-medium whitespace-nowrap pr-10 sidebar-create-action' : 'hover:bg-white/10'}`}
+			style={{
+				color: newShell
+					? readableTextOn(theme.colors.textMain, [theme.colors.bgSidebar])
+					: theme.colors.textMain,
+			}}
 			title={
 				t(
 					newShell
@@ -1522,12 +1566,29 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 			}}
 			className="flex flex-col min-w-0 gap-1 select-none"
 		>
-			<div className="px-2 pt-1 pb-2 flex flex-col gap-1.5">
+			<div
+				className={
+					newShell ? 'px-3 pt-3.5 pb-2 flex flex-col gap-2' : 'px-2 pt-1 pb-2 flex flex-col gap-1.5'
+				}
+			>
 				{/* The first thing in the list is starting one, the way a chat app opens. */}
 				{newShell ? (
-					<div className="flex items-center justify-between">
+					<div
+						className="relative flex flex-col gap-2"
+						data-testid="sidebar-create-actions"
+						style={{ '--sidebar-create-hover': theme.colors.bgActivity } as CSSProperties}
+					>
 						{newConversationButton}
-						{headerMenu}
+						<button
+							type="button"
+							className="sidebar-create-action flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium whitespace-nowrap"
+							style={{ color: readableTextOn(theme.colors.textMain, [theme.colors.bgSidebar]) }}
+							onClick={() => openUiSurface('create-team')}
+						>
+							<Plus aria-hidden className="w-4 h-4 shrink-0" />
+							{t('workflows.team.new')}
+						</button>
+						<div className="absolute right-0 top-0 shrink-0">{headerMenu}</div>
 					</div>
 				) : (
 					newConversationButton
@@ -1566,7 +1627,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 				)}
 			</div>
 
-			{historyStatus === 'loading' && totalConversations > 0 && (
+			{historyStatus === 'loading' && totalRows > 0 && (
 				<p
 					role="status"
 					className="px-3 text-2xs flex items-center gap-1"
@@ -1608,7 +1669,7 @@ export const ProjectSessionTree = memo(function ProjectSessionTree({
 					{t('workflows.conversations.titleResults')}
 				</h3>
 			)}
-			{filtering && totalConversations === 0 ? (
+			{filtering && totalRows === 0 ? (
 				<p className="px-3 py-2 text-xs italic" style={{ color: theme.colors.textDim }}>
 					{historyLoading
 						? t(

@@ -24,6 +24,7 @@ import {
 	resetNativeConversationRefreshes,
 } from '../../../../renderer/services/refreshNativeConversation';
 import { transcriptMessagesToLogEntries } from '../../../../renderer/utils/transcriptMessages';
+import { saveSessionToolConfig } from '../../../../renderer/services/sessionToolConfig';
 
 // The renderer sentry module only exports these two helpers, so a full mock is
 // safe and avoids pulling @sentry/electron/renderer into jsdom. Lets us assert
@@ -165,6 +166,51 @@ describe('useDebouncedPersistence', () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it('acknowledges a tool-config save only after an older autosave and the current snapshot land', async () => {
+		const owner = makeSession({ id: 'owner', customPath: '/fixture/old', enableMaestroP: false });
+		seedSessions([owner]);
+		const hook = renderPersistence(makeInitialLoadRef(true));
+		let savedPath = owner.customPath;
+		let release!: () => void;
+		vi.mocked(window.maestro.sessions.setAll).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = () => {
+						savedPath = '/fixture/old';
+						resolve(true);
+					};
+				})
+		);
+		vi.mocked(window.maestro.sessions.setMany).mockImplementation(async (sessions) => {
+			savedPath = (sessions as Session[])[0]?.customPath;
+			return true;
+		});
+		act(() => hook.result.current.flushNow([owner]));
+		expect(release).toBeDefined();
+		let acknowledged = false;
+		const updating = saveSessionToolConfig(owner.id, {
+			customPath: '/fixture/new',
+			enableMaestroP: true,
+		}).then(() => {
+			acknowledged = true;
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(savedPath).toBe('/fixture/new');
+		expect(acknowledged).toBe(false);
+		await act(async () => {
+			release();
+			await updating;
+		});
+		expect(acknowledged).toBe(true);
+		expect(savedPath).toBe('/fixture/new');
+		expect(useSessionStore.getState().sessions[0]).toMatchObject({
+			customPath: '/fixture/new',
+			enableMaestroP: true,
+		});
 	});
 
 	it('retains handoff and review origins in the persisted tab tree', () => {

@@ -17,6 +17,60 @@ const statusOf = (entries: EventInput[], id = 'A1') =>
 	reduceLedger(ledger(...entries)).criteria.find((c) => c.id === id)?.status;
 
 describe('reduceLedger', () => {
+	it('counts owner messages and wake dispatches once and retains substitute history', () => {
+		const events = ledger(
+			{ kind: 'team_created', config },
+			{
+				kind: 'owner_message',
+				actor: 'owner',
+				messageId: 'note',
+				text: 'Keep the scope',
+				to: 'pm',
+			},
+			{ kind: 'message_delivered', messageId: 'note', seat: 'pm' },
+			{
+				kind: 'owner_message',
+				actor: 'owner',
+				messageId: 'note',
+				text: 'Keep the scope',
+				to: 'pm',
+			},
+			{
+				kind: 'turn_dispatched',
+				seat: 'pm',
+				dispatchId: 'wake',
+				turn: 'topic',
+				mode: 'wake',
+				promptDigest: 'wake',
+			},
+			{
+				kind: 'turn_dispatched',
+				seat: 'pm',
+				dispatchId: 'wake',
+				turn: 'topic',
+				mode: 'wake',
+				promptDigest: 'wake',
+			},
+			{
+				kind: 'substitute_took_over',
+				seat: 'dev',
+				model: { tool: 'claude-code', model: 'sonnet' },
+			},
+			{
+				kind: 'seat_bound',
+				seat: 'dev',
+				model: config.seats.dev,
+				workspace: '/project/dev',
+				reason: 'restored',
+			}
+		);
+		expect(reduceLedger([...events, ...events]).statistics).toMatchObject({
+			ownerMessages: 1,
+			wakes: 1,
+			substitutions: 1,
+			turns: 1,
+		});
+	});
 	it('replays the complete direct path through owner acceptance', () => {
 		const entries: EventInput[] = [{ kind: 'team_created', config }];
 		for (const seat of ['pm', 'dev', 'qa'] as const)
@@ -381,40 +435,51 @@ describe('reduceLedger', () => {
 		expect(state.standardChanges).toHaveLength(2);
 	});
 
-	it('charges a dispatch once despite duplicate finishes and keeps zero cost distinct from unknown', () => {
-		const finish: EventInput = {
-			kind: 'turn_finished',
-			dispatchId: 't',
-			seat: 'dev',
-			exitCode: 0,
-			durationMs: 10,
-			inputTokens: 20,
-			outputTokens: 5,
-			costUsd: 0,
-		};
-		const state = reduceLedger(
-			ledger(
-				...baseline,
-				{ kind: 'turn_dispatched', dispatchId: 't', seat: 'dev', turn: 'work', promptDigest: 'x' },
-				finish,
-				finish,
-				{ kind: 'report_rejected', dispatchId: 't', seat: 'dev', reason: 'Missing done' },
-				{ kind: 'report_repaired', dispatchId: 't', seat: 'dev' },
-				{ kind: 'report_accepted', dispatchId: 't', seat: 'dev', report: goodReports.work }
-			)
-		);
-		expect(state.usage).toEqual({
-			turns: 1,
-			inputTokens: 20,
-			outputTokens: 5,
-			costUsd: 0,
-			durationMs: 10,
-			turnsWithTokens: 1,
-			turnsWithCost: 1,
-		});
-		expect(state.turns[0].repaired).toBe(true);
-		expect(state.turns[0].reportError).toBeUndefined();
-	});
+	it.each([undefined, 'model-unavailable', 'login-expired'] as const)(
+		'charges %s once despite duplicate finishes and keeps zero cost distinct from unknown',
+		(failureKind) => {
+			const finish: EventInput = {
+				kind: 'turn_finished',
+				dispatchId: 't',
+				seat: 'dev',
+				exitCode: 0,
+				durationMs: 10,
+				inputTokens: 20,
+				outputTokens: 5,
+				costUsd: 0,
+				failureKind,
+			};
+			const state = reduceLedger(
+				ledger(
+					...baseline,
+					{
+						kind: 'turn_dispatched',
+						dispatchId: 't',
+						seat: 'dev',
+						turn: 'work',
+						promptDigest: 'x',
+					},
+					finish,
+					finish,
+					{ kind: 'report_rejected', dispatchId: 't', seat: 'dev', reason: 'Missing done' },
+					{ kind: 'report_repaired', dispatchId: 't', seat: 'dev' },
+					{ kind: 'report_accepted', dispatchId: 't', seat: 'dev', report: goodReports.work }
+				)
+			);
+			expect(state.usage).toEqual({
+				turns: 1,
+				budgetTurns: 1,
+				inputTokens: 20,
+				outputTokens: 5,
+				costUsd: 0,
+				durationMs: 10,
+				turnsWithTokens: 1,
+				turnsWithCost: 1,
+			});
+			expect(state.turns[0].repaired).toBe(true);
+			expect(state.turns[0].reportError).toBeUndefined();
+		}
+	);
 
 	it('tracks baseline edits and returns without allowing drafts or unauthorized relaxation to replace it', () => {
 		const entries: EventInput[] = [
@@ -694,6 +759,71 @@ describe('reduceLedger', () => {
 		expect(improved.reviewDecision).toMatchObject({ kind: 'diagnose', reason: 'rejections' });
 	});
 
+	it('counts separate review problems on one criterion and recognizes independently verified partial progress', () => {
+		const problem = (location: string) => ({
+			title: 'Unreadable',
+			location,
+			criterion: 'E1',
+			impact: 'Cannot read',
+			expected: 'Readable text',
+		});
+		const first: EventInput[] = [
+			...baseline,
+			...['Header', 'Footer'].map((location) => ({
+				kind: 'issue_opened' as const,
+				actor: 'pm' as const,
+				issueId: location,
+				reviewId: 'r1',
+				title: 'Unreadable',
+				issueKind: 'defect' as const,
+				criterionId: 'E1',
+				location,
+				expected: 'Readable text',
+			})),
+			{
+				kind: 'review',
+				actor: 'pm',
+				verdict: 'reject',
+				problems: [problem('Header'), problem('Footer')],
+				suggestions: [],
+			},
+		];
+		const before = reduceLedger(ledger(...first));
+		expect(before.reviewProgress.failures).toHaveLength(2);
+		const dropped = reduceLedger(
+			ledger(...first, {
+				kind: 'review',
+				actor: 'pm',
+				verdict: 'reject',
+				problems: [problem('Footer')],
+				suggestions: [],
+			})
+		);
+		expect(dropped.reviewProgress.failures).toHaveLength(2);
+		expect(dropped.reviewProgress.attempts.at(-1)?.verdict).toBe('dup');
+		const after = reduceLedger(
+			ledger(
+				...first,
+				{ kind: 'issue_fixed', actor: 'dev', issueId: 'Header' },
+				{
+					kind: 'issue_verified',
+					actor: 'qa',
+					issueId: 'Header',
+					pass: true,
+					evidence: 'qa/header-readable',
+				},
+				{
+					kind: 'review',
+					actor: 'pm',
+					verdict: 'reject',
+					problems: [problem('Footer')],
+					suggestions: [],
+				}
+			)
+		);
+		expect(after.reviewProgress.failures).toHaveLength(1);
+		expect(after.reviewProgress.attempts.at(-1)?.verdict).toBe('fewer');
+	});
 	it.each<TeamTerminal>(['all', 'gaps', 'stopped'])(
 		'derives statistics from the actual %s path without turning gaps into passes',
 		(terminal) => {
@@ -728,6 +858,9 @@ describe('reduceLedger', () => {
 			expect(state.terminal).toBe(terminal);
 			expect(state.statistics).toEqual({
 				ownerDecisions: 2,
+				ownerMessages: 0,
+				wakes: 0,
+				substitutions: 0,
 				discussions: 0,
 				rejections: terminal === 'all' ? 0 : 1,
 				retros: terminal === 'all' ? 0 : 1,

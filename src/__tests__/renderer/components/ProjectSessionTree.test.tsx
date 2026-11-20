@@ -1,7 +1,11 @@
+import { useTeamStore } from '../../../renderer/stores/teamStore';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { ProjectSessionTree } from '../../../renderer/components/SessionList/ProjectSessionTree';
+import { buildProjectSessionTree } from '../../../renderer/utils/projectSessionTree';
+import { createMockSession } from '../../helpers/mockSession';
+import { createMockAITab } from '../../helpers/mockTab';
 import type {
 	SidebarConversation,
 	SidebarProject,
@@ -16,6 +20,10 @@ beforeEach(() => usePermissionRequestStore.setState({ queue: [], responding: [],
 
 // Pin the English copy so the tests do not depend on the catalog keys landing
 // in the same change.
+vi.mock('../../../renderer/utils/measureTextWidth', () => ({
+	measureTextWidth: (text: string) => Array.from(text).length * 12,
+}));
+
 const EN: Record<string, string> = {
 	'workflows.projectSettings.title': 'Project settings',
 	'workflows.projectSettings.newConversation': 'New with project defaults',
@@ -765,4 +773,87 @@ it('shows a separate content group with highlighted snippet and keyboard opening
 	expect(document.activeElement).toBe(row);
 	fireEvent.click(row);
 	expect(open).toHaveBeenCalledWith(hit);
+});
+
+it('stacks full-width creation actions with icons before search and retains the header menu', () => {
+	useSettingsStore.setState({ newShell: true });
+	const newConversation = vi.fn();
+	const menu = vi.fn();
+	setup({
+		onNewConversationHere: newConversation,
+		headerMenu: (
+			<button aria-label="App menu" onClick={menu}>
+				Menu
+			</button>
+		),
+	});
+	const actions = screen.getByTestId('sidebar-create-actions');
+	const conversation = screen.getByTestId('sidebar-new-conversation');
+	const team = within(actions).getByRole('button', { name: 'workflows.team.new' });
+	expect(actions).toHaveClass('flex-col');
+	for (const button of [conversation, team]) {
+		expect(button).toHaveClass('w-full', 'whitespace-nowrap');
+		expect(button.querySelector('svg')).not.toBeNull();
+	}
+	expect(
+		conversation.compareDocumentPosition(team) & Node.DOCUMENT_POSITION_FOLLOWING
+	).toBeTruthy();
+	expect(
+		team.compareDocumentPosition(screen.getByRole('textbox')) & Node.DOCUMENT_POSITION_FOLLOWING
+	).toBeTruthy();
+	fireEvent.click(conversation);
+	expect(newConversation).toHaveBeenCalledOnce();
+	fireEvent.click(team);
+	expect(useTeamStore.getState().setupOpen).toBe(true);
+	const hamburger = within(actions).getByRole('button', { name: 'App menu' });
+	expect(hamburger.closest('button')).toBe(hamburger);
+	hamburger.focus();
+	expect(hamburger).toHaveFocus();
+	fireEvent.click(hamburger);
+	expect(menu).toHaveBeenCalledOnce();
+});
+
+it('gives eight worktree titles distinct visible text in a 264px bar', () => {
+	useSettingsStore.setState({ newShell: true });
+	const names = Array.from(
+		{ length: 8 },
+		(_, index) => '# 修复 `草稿` ' + '同一工作树里的公共上下文'.repeat(4) + ' **情况' + index + '**'
+	);
+	const session = createMockSession({
+		id: 'worktree-owner',
+		cwd: '/project/worktree',
+		projectRoot: '/project',
+		worktreeBranch: 'feature/long-worktree-branch',
+		aiTabs: names.map((name, index) =>
+			createMockAITab({ id: 'tab-' + index, name, createdAt: index + 1 })
+		),
+	});
+	const projects = buildProjectSessionTree({ newShell: true, sessions: [session], groups: [] });
+	const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(264 - 144);
+	try {
+		setup({ projects });
+		const titles = Array.from(document.querySelectorAll<HTMLElement>('[data-conversation-title]'));
+		expect(titles).toHaveLength(8);
+		expect(new Set(titles.map((element) => element.textContent)).size).toBe(8);
+		for (const element of titles) {
+			expect(element.textContent).not.toMatch(/[#`*]/);
+			expect(element.title).toBe(element.dataset.conversationTitle);
+			// The shortened text is for the eye; the whole title stays readable and searchable.
+			if (element.textContent !== element.dataset.conversationTitle) {
+				expect(element.getAttribute('aria-hidden')).toBe('true');
+				const full = element.parentElement!.querySelector('.sr-only');
+				expect(full?.textContent).toBe(element.dataset.conversationTitle);
+			}
+		}
+		expect(titles.some((element) => element.getAttribute('aria-hidden') === 'true')).toBe(true);
+		const markers = Array.from(document.querySelectorAll<HTMLElement>('[data-worktree]'));
+		expect(markers).toHaveLength(8);
+		for (const marker of markers) {
+			expect(marker.textContent).toBe('');
+			expect(marker.querySelectorAll('svg')).toHaveLength(1);
+			expect(marker.title).toContain('feature/long-worktree-branch');
+		}
+	} finally {
+		width.mockRestore();
+	}
 });

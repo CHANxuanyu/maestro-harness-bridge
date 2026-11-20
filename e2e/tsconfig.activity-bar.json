@@ -5,5 +5,15 @@
 		"allowJs": true,
 		"checkJs": false
 	},
-	"include": ["native-activity-bar.spec.ts", "../src/renderer/global.d.ts", "../src/types"]
+	"include": [
+		"native-activity-bar.spec.ts",
+		"native-claude-permission.spec.ts",
+		"native-new-shell-cli-parity.spec.ts",
+		"native-new-shell-ssh.spec.ts",
+		"native-new-shell.spec.ts",
+		"native-project-tool-config.spec.ts",
+		"native-stop-resume.spec.ts",
+		"../src/renderer/global.d.ts",
+		"../src/types"
+	]
 }

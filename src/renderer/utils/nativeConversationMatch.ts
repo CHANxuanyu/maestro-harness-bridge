@@ -161,7 +161,12 @@ export function sessionProjectKey(
 	if (group) return { key: `group:${group.id}`, group };
 	const ssh = session.sessionSshRemoteConfig;
 	const host = ssh?.enabled ? ssh.remoteId || session.sshRemoteId || session.id : 'local';
-	return { key: `path:${host}:${session.projectRoot || session.cwd}` };
+	return { key: projectPathKey(session.projectRoot || session.cwd, host) };
+}
+
+/** Path-backed project identity shared by conversations and teams without a runner. */
+export function projectPathKey(projectPath: string, host = 'local'): string {
+	return `path:${host}:${projectPath}`;
 }
 
 /**

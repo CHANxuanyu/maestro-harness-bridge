@@ -1,0 +1,128 @@
+{
+	"fetchedAt": 1767225600000,
+	"staleAt": 4102444800000,
+	"version": 1,
+	"catalog": {
+		"surface": "cc",
+		"config": {
+			"models": [
+				{
+					"id": "claude-opus-current",
+					"name": "Current Opus",
+					"description": "Synthetic Current Opus description",
+					"section": "main",
+					"runtime": {
+						"family": "opus",
+						"effort_levels": ["low", "medium", "high", "xhigh", "max"],
+						"default_effort": "high"
+					},
+					"thinking": {
+						"type": "adaptive",
+						"effort_options": [
+							{
+								"id": "low",
+								"name": "Low",
+								"tooltip": {
+									"content": "Synthetic low effort"
+								}
+							},
+							{
+								"id": "medium",
+								"name": "Medium",
+								"tooltip": {
+									"content": "Synthetic medium effort"
+								}
+							},
+							{
+								"id": "high",
+								"name": "High",
+								"tooltip": {
+									"content": "Synthetic high effort"
+								}
+							},
+							{
+								"id": "xhigh",
+								"name": "Extra",
+								"tooltip": {
+									"content": "Synthetic xhigh effort"
+								}
+							},
+							{
+								"id": "max",
+								"name": "Max",
+								"tooltip": {
+									"content": "Synthetic max effort"
+								}
+							}
+						]
+					}
+				},
+				{
+					"id": "claude-opus-4-6",
+					"name": "Opus 4.6",
+					"description": "Synthetic Opus 4.6 description",
+					"section": "overflow",
+					"runtime": {
+						"family": "opus",
+						"effort_levels": ["low", "medium", "high", "max"],
+						"default_effort": "high"
+					},
+					"thinking": {
+						"type": "adaptive",
+						"effort_options": [
+							{
+								"id": "low",
+								"name": "Low",
+								"tooltip": {
+									"content": "Synthetic low effort"
+								}
+							},
+							{
+								"id": "medium",
+								"name": "Medium",
+								"tooltip": {
+									"content": "Synthetic medium effort"
+								}
+							},
+							{
+								"id": "high",
+								"name": "High",
+								"tooltip": {
+									"content": "Synthetic high effort"
+								}
+							},
+							{
+								"id": "max",
+								"name": "Max",
+								"tooltip": {
+									"content": "Synthetic max effort"
+								}
+							}
+						]
+					}
+				},
+				{
+					"id": "claude-haiku-4-5",
+					"name": "Haiku 4.5",
+					"description": "Synthetic Haiku 4.5 description",
+					"section": "overflow",
+					"runtime": {
+						"family": "haiku"
+					},
+					"thinking": {
+						"type": "disabled"
+					}
+				}
+			],
+			"provider_alias_targets": {
+				"opus": {
+					"default": "claude-opus-current"
+				}
+			}
+		},
+		"state": {
+			"model": "claude-opus-current",
+			"selection_source": "user_setting"
+		}
+	}
+}

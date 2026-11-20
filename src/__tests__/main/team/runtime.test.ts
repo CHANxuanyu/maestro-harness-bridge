@@ -1,3 +1,4 @@
+import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileTeamTurn, createTeamRuntime } from '../../../main/team/runtime';
 import { getSessionStorage } from '../../../main/agents';
@@ -30,6 +31,7 @@ describe('team production runtime', () => {
 		cwd: '/work/dev',
 		prompt: 'work',
 		permissionMode: 'full',
+		turn: 'work',
 		customEnv: { CODEX_HOME: '/accounts/dev' },
 		nativeSessionId: 'native',
 	};
@@ -67,7 +69,7 @@ describe('team production runtime', () => {
 		expect(result?.text).toBe('Visible result\n```team-report\n{}\n```');
 		expect(result?.nativeSessionId).toBe('native');
 		expect(storage.readSessionMessages).toHaveBeenNthCalledWith(2, '/work/dev', 'native', {
-			configDir: '/accounts/dev',
+			configDir: path.resolve('/accounts/dev'),
 			readOnly: true,
 			offset: 2,
 			limit: 500,
@@ -89,7 +91,11 @@ describe('team production runtime', () => {
 		expect(
 			(await reconcileTeamTurn({ ...request, nativeSessionId: undefined }))?.nativeSessionId
 		).toBe('ours');
-		expect(storage.listSessions).toHaveBeenCalledWith('/work/dev', undefined, '/accounts/dev');
+		expect(storage.listSessions).toHaveBeenCalledWith(
+			'/work/dev',
+			undefined,
+			path.resolve('/accounts/dev')
+		);
 	});
 
 	it('leaves a marked turn with only a progress note unfinished', async () => {
@@ -111,5 +117,22 @@ describe('team production runtime', () => {
 		const event = { id: 'event', seq: 1, kind: 'paused', actor: 'owner' };
 		subscribe.mock.calls[0][0]('team', event);
 		expect(safeSend).toHaveBeenCalledWith('team:changed', { teamId: 'team', event });
+		const dispatch = {
+			...event,
+			kind: 'turn_dispatched',
+			dispatchId: 'dispatch',
+			promptDigest: 'digest',
+			prompt: 'Heavy audit text'.repeat(4000),
+		};
+		subscribe.mock.calls[0][0]('team', dispatch);
+		expect(safeSend).toHaveBeenLastCalledWith('team:changed', {
+			teamId: 'team',
+			event: { ...dispatch, prompt: undefined },
+		});
+		expect(
+			safeSend.mock.calls.every(
+				([channel, payload]) => channel === 'team:changed' && !('events' in payload)
+			)
+		).toBe(true);
 	});
 });

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import os from 'node:os';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { ipcMain } from 'electron';
 import {
 	registerAgentsHandlers,
@@ -24,6 +24,11 @@ import type {
 } from '../../../../shared/nativeCommands';
 import { createMockSession } from '../../../helpers/mockSession';
 import { createMockAITab } from '../../../helpers/mockTab';
+import codexCatalog from '../../../fixtures/model-catalog/codex.json';
+
+vi.mock('../../../../main/agents/model-catalog-quota', () => ({
+	cachedModelCatalogQuota: vi.fn(),
+}));
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
@@ -173,9 +178,53 @@ describe('agents IPC handlers', () => {
 		handlers.clear();
 	});
 
+	describe('agents:getModelCatalog', () => {
+		it('uses provider and stored account context through the registered IPC handler', async () => {
+			const accountDir = await mkdtemp(path.join(os.tmpdir(), 'catalog-ipc-'));
+			try {
+				await writeFile(path.join(accountDir, 'models_cache.json'), JSON.stringify(codexCatalog));
+				await writeFile(path.join(accountDir, 'config.toml'), 'model = "sol"');
+				const session = createMockSession({
+					id: 'catalog-agent',
+					toolType: 'codex',
+					customEnvVars: { CODEX_HOME: accountDir },
+				});
+				registerAgentsHandlers({ ...deps, sessionsStore: { get: () => [session] } as never });
+				const handler = handlers.get('agents:getModelCatalog')!;
+				const result = await handler(
+					{} as never,
+					{ provider: 'codex', sessionId: session.id } as never
+				);
+				expect(result).toMatchObject({
+					provider: 'codex',
+					effortLabel: 'Reasoning',
+					followDefault: { modelId: 'sol', source: 'config' },
+					source: { kind: 'codex-cache' },
+				});
+				await expect(
+					handler({} as never, { provider: 'claude-code', sessionId: session.id } as never)
+				).rejects.toThrow('Agent does not match');
+			} finally {
+				await rm(accountDir, { recursive: true, force: true });
+			}
+		});
+
+		it('returns an explicit remote limitation without consulting local discovery', async () => {
+			const handler = handlers.get('agents:getModelCatalog')!;
+			expect(
+				await handler({} as never, { provider: 'codex', sshRemoteId: 'remote' } as never)
+			).toMatchObject({
+				error: 'unsupported-remote',
+				source: { kind: 'fallback' },
+			});
+			expect(mockAgentDetector.discoverModels).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('registration', () => {
 		it('should register all agents handlers', () => {
 			const expectedChannels = [
+				'agents:getModelCatalog',
 				'agents:getPresets',
 				'agents:prepareDeepSeekPreset',
 				'agents:detect',

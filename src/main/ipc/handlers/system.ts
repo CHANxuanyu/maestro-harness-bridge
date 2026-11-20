@@ -1,3 +1,4 @@
+import { captureWebContentsPage } from '../../utils/capture-page';
 /**
  * System IPC Handlers
  *
@@ -392,28 +393,7 @@ export function registerSystemHandlers(deps: SystemHandlerDependencies): void {
 			event,
 			rect?: { x: number; y: number; width: number; height: number }
 		): Promise<string | null> => {
-			const contents = event.sender;
-			if (!contents || contents.isDestroyed()) return null;
-
-			// getBoundingClientRect() hands back floats; Chromium wants whole
-			// DIPs and answers an out-of-range rect with an empty image, so the
-			// region is rounded and clamped before it goes over.
-			let area: Electron.Rectangle | undefined;
-			if (rect) {
-				const x = Math.max(0, Math.floor(rect.x));
-				const y = Math.max(0, Math.floor(rect.y));
-				area = {
-					x,
-					y,
-					width: Math.floor(rect.x + rect.width) - x,
-					height: Math.floor(rect.y + rect.height) - y,
-				};
-				if (area.width <= 0 || area.height <= 0) return null;
-			}
-
-			const image = area ? await contents.capturePage(area) : await contents.capturePage();
-			if (image.isEmpty()) return null;
-			return image.toDataURL();
+			return captureWebContentsPage(event.sender, rect);
 		}
 	);
 

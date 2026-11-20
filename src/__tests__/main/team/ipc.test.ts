@@ -21,13 +21,24 @@ describe('team IPC/preload contract', () => {
 			'create',
 			'list',
 			'get',
+			'prompt',
+			'events',
 			'status',
 			'answer',
+			'baselineEdit',
+			'baselineDiff',
+			'baselineReturn',
+			'log',
 			'say',
 			'pause',
 			'resume',
 			'stop',
 			'accept',
+			'extend',
+			'assignResidual',
+			'seatSet',
+			'seatSub',
+			'action',
 			'requestChanges',
 			'export',
 			'seatTranscript',
@@ -44,8 +55,27 @@ describe('team IPC/preload contract', () => {
 			expect(service[name]).toHaveBeenCalledOnce();
 		}
 	});
+	it('normalizes a missing JSON recipient before invoking the owner-message service', async () => {
+		vi.mocked(ipcMain.handle).mockClear();
+		const say = vi.fn(async () => ({ status: 'queued', messageId: 'message', to: 'pm' }));
+		registerTeamHandlers({ say } as unknown as TeamScheduler);
+		const [, handle] = vi.mocked(ipcMain.handle).mock.calls.find(([name]) => name === 'team:say')!;
+		const args = JSON.parse(JSON.stringify(['team', 'Queued question for PM', undefined]));
+		expect(await handle(undefined as never, ...args)).toEqual({
+			status: 'queued',
+			messageId: 'message',
+			to: 'pm',
+		});
+		expect(say).toHaveBeenCalledWith('team', 'Queued question for PM', 'pm');
+	});
 	it('invokes fixed argument order and unsubscribes exactly its own changed listener', async () => {
 		const api = createTeamApi();
+		await api.get('team', true);
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:get', 'team', true);
+		await api.prompt('team', 'dispatch');
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:prompt', 'team', 'dispatch');
+		await api.events('team');
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:events', 'team');
 		await api.answer('team', 'card', 'option', 'note');
 		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
 			'team:answer',
@@ -53,6 +83,14 @@ describe('team IPC/preload contract', () => {
 			'card',
 			'option',
 			'note'
+		);
+		await api.baselineEdit('team', 'A1', 'New text', { proof: 'qa', how: 'Inspect both views' });
+		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith(
+			'team:baselineEdit',
+			'team',
+			'A1',
+			'New text',
+			{ proof: 'qa', how: 'Inspect both views' }
 		);
 		await api.say('team', 'message', 'dev');
 		expect(ipcRenderer.invoke).toHaveBeenLastCalledWith('team:say', 'team', 'message', 'dev');

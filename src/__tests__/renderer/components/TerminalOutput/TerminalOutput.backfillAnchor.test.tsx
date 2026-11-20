@@ -620,8 +620,8 @@ describe.each([
 				backfill.onPrepend!(older.length);
 				rerender(<TerminalOutput {...props(sessionWith([...older, ...current]))} />);
 			});
-			// A new turn arrives from elsewhere. The new shell folds its streaming
-			// content into the activity bar; classic keeps the separate rows.
+			// A new turn arrives from elsewhere. Public notes fold in the new shell,
+			// but the latest answer stays visible while its process is still running.
 			const show = (tail: LogEntry[], busy = true) =>
 				act(() => {
 					rerender(
@@ -643,12 +643,10 @@ describe.each([
 			show([ask, note]);
 			expect(count()).toBe('2');
 			show([ask, note, answer('The build')]);
-			expect(renderedIds(container).slice(-2)).toEqual(
-				newShell ? ['live-q', 'live-p'] : ['live-p', 'live-a']
-			);
+			expect(renderedIds(container).slice(-2)).toEqual(['live-p', 'live-a']);
 			if (newShell) {
 				expect(container.querySelectorAll('[data-testid="turn-activity-bar"]')).toHaveLength(1);
-				expect(container.querySelector('[data-log-id="live-a"]')).toBeNull();
+				expect(container.querySelector('[data-log-id="live-a"]')).toHaveTextContent('The build');
 			}
 			expect(count()).toBe('3');
 			const rows = renderedIds(container).length;
@@ -676,8 +674,8 @@ describe.each([
 			expect(renderedIds(container)).not.toContain('live-a2');
 			expect(count()).toBe('3');
 			expect(readingRow()).toEqual(before);
-			// Completion reveals the answer without counting it a second time or
-			// disturbing the reading anchor as the activity bar becomes a summary.
+			// Completion keeps the answer visible without counting it a second time
+			// or disturbing the anchor as the activity bar becomes a summary.
 			show(
 				[
 					ask,

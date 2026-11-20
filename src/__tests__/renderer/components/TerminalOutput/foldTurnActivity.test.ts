@@ -2,9 +2,14 @@ import { describe, it, expect } from 'vitest';
 import type { LogEntry } from '../../../../renderer/types';
 import {
 	foldTurnActivity,
+	createTurnActivityFolder,
 	summarizeTurnActivity,
 	turnActivityOutcome,
 } from '../../../../renderer/components/TerminalOutput/utils/foldTurnActivity';
+import {
+	collapseAiResponseLogs,
+	createAiResponseCollapse,
+} from '../../../../renderer/components/TerminalOutput/utils/collapseAiResponseLogs';
 
 const entry = (id: string, ts: number, source: LogEntry['source'], extra: Partial<LogEntry> = {}) =>
 	({ id, timestamp: ts, source, text: id, ...extra }) as LogEntry;
@@ -18,6 +23,138 @@ const tool = (id: string, ts: number, status: 'completed' | 'failed' | 'canceled
 const ids = (logs: LogEntry[]) => logs.map((log) => log.id);
 const fold = (logs: LogEntry[], keepLastTurnOpen = false) =>
 	foldTurnActivity(logs, { keepLastTurnOpen });
+
+describe('cached turn projection', () => {
+	it('reuses finished activity, delivery and plan identities while only the open answer changes', () => {
+		const cachedFold = createTurnActivityFolder();
+		const collapse = createAiResponseCollapse();
+		const options = { keepLastTurnOpen: true, newShell: true };
+		const plan = tool('plan', 2);
+		plan.metadata!.toolState!.input = { plan: [{ step: 'Done', status: 'completed' }] };
+		const logs = [
+			user('u1', 0),
+			tool('t1', 1),
+			plan,
+			reply('a1', 3),
+			reply('a2', 4),
+			user('u2', 5),
+			tool('t2', 6),
+			reply('a3', 7),
+		];
+		const initial = cachedFold(collapse(logs), options);
+		const streamed = cachedFold(
+			collapse([...logs.slice(0, -1), { ...logs.at(-1)!, text: 'Updated' }]),
+			options
+		);
+		expect(streamed.activityByHostId.get('t1')).toBe(initial.activityByHostId.get('t1'));
+		expect(streamed.deliveryByHostId.get('a1')).toBe(initial.deliveryByHostId.get('a1'));
+		expect(streamed.deliveryByHostId.get('a1')?.plan?.completed).toBe(1);
+		expect(streamed.activityByHostId.get('t2')?.entries).toBe(
+			initial.activityByHostId.get('t2')?.entries
+		);
+		expect(streamed.logs.at(-1)?.text).toBe('Updated');
+		const ended = cachedFold(collapse(logs), { ...options, keepLastTurnOpen: false });
+		expect(ended).toEqual(
+			foldTurnActivity(collapse(logs), { ...options, keepLastTurnOpen: false })
+		);
+		expect(ended.activityByHostId.get('t2')?.running).toBe(false);
+	});
+
+	it('invalidates corrected entries and turn boundaries without discarding other finished turns', () => {
+		const cachedFold = createTurnActivityFolder();
+		const options = { keepLastTurnOpen: true, newShell: true };
+		let logs = [
+			user('u1', 0),
+			tool('t1', 1),
+			reply('a1', 2),
+			user('u2', 3),
+			tool('t2', 4),
+			reply('a2', 5),
+			user('u3', 6),
+		];
+		const initial = cachedFold(logs, options);
+		// Same ids, length and boundary entries; only a middle tool changes.
+		logs = logs.map((log) =>
+			log.id === 't1'
+				? {
+						...log,
+						text: 'Write',
+						metadata: { toolState: { status: 'completed', input: { file_path: 'new.ts' } } },
+					}
+				: log
+		);
+		const corrected = cachedFold(logs, options);
+		expect(corrected).toEqual(foldTurnActivity(logs, options));
+		expect(corrected.activityByHostId.get('t1')).not.toBe(initial.activityByHostId.get('t1'));
+		expect(corrected.activityByHostId.get('t2')).toBe(initial.activityByHostId.get('t2'));
+		expect(corrected.deliveryByHostId.get('a1')?.delivery?.files).toBe(1);
+		// A late completion changes the user object, not its id or the tools.
+		logs = logs.map((log) =>
+			log.id === 'u1'
+				? {
+						...log,
+						turnCompletion: {
+							status: 'error',
+							timestamp: 3000,
+							reason: 'Late failure',
+							delivery: { files: 1, additions: 7, deletions: 2, paths: ['new.ts'] },
+						},
+					}
+				: log
+		);
+		const completed = cachedFold(logs, options);
+		expect(completed).toEqual(foldTurnActivity(logs, options));
+		expect(completed.activityByHostId.get('t1')?.reason).toBe('Late failure');
+		expect(completed.deliveryByHostId.get('a1')?.delivery?.additions).toBe(7);
+		const variants = [
+			// Backfill, truncation into a turn, and restoring that boundary.
+			[user('older', -3), tool('older-tool', -2), reply('older-answer', -1), ...logs],
+			logs.slice(1),
+			logs,
+			// Delete/insert a boundary, then reorder complete turns.
+			logs.filter((log) => log.id !== 'u2'),
+			[...logs.slice(0, 2), user('inserted', 1.5), ...logs.slice(2)],
+			[...logs.slice(3, 6), ...logs.slice(0, 3), ...logs.slice(6)],
+			logs.slice(0, 3),
+			[],
+			logs,
+		];
+		for (const variant of variants) {
+			for (const newShell of [true, false, true]) {
+				for (const keepLastTurnOpen of [true, false]) {
+					const mode = { newShell, keepLastTurnOpen };
+					expect(cachedFold(variant, mode)).toEqual(foldTurnActivity(variant, mode));
+				}
+			}
+		}
+	});
+
+	it('keeps response groups stable and invalidates edits anywhere in a merged group', () => {
+		const collapse = createAiResponseCollapse();
+		const logs = [
+			user('u1', 0),
+			reply('a1', 1),
+			reply('a2', 2),
+			reply('a3', 3),
+			tool('t1', 4),
+			reply('a4', 5),
+		];
+		const initial = collapse(logs);
+		expect(collapse([...logs])[1]).toBe(initial[1]);
+		expect(initial.at(-1)).toBe(logs.at(-1));
+		for (const changedIndex of [1, 2, 3]) {
+			const changed = logs.map((log, index) =>
+				index === changedIndex ? { ...log, text: 'Corrected' } : log
+			);
+			const result = collapse(changed);
+			expect(result).toEqual(collapseAiResponseLogs(changed));
+			expect(result[1]).not.toBe(initial[1]);
+		}
+		for (const variant of [logs.slice(0, 3), logs.slice(2), [], logs]) {
+			expect(collapse(variant)).toEqual(collapseAiResponseLogs(variant));
+		}
+	});
+});
 
 describe('foldTurnActivity', () => {
 	it("folds a finished turn's activity and interim text behind its first step", () => {
@@ -98,6 +235,22 @@ describe('foldTurnActivity', () => {
 });
 
 describe('new shell running turn', () => {
+	it('omits unavailable live delivery instead of falling back to unknown historical counts', () => {
+		const write = entry('write', 1, 'tool', {
+			text: 'Write',
+			metadata: { toolState: { status: 'completed', writePaths: ['a.ts'] } },
+		});
+		const prompt = user('u', 0);
+		const historical = foldTurnActivity([prompt, write, reply('answer', 2)], { newShell: true });
+		expect(historical.deliveryByHostId.get('answer')?.delivery).toMatchObject({
+			files: 1,
+			additions: null,
+			deletions: null,
+		});
+		const completed = { ...prompt, turnCompletion: { status: 'completed' as const, timestamp: 2 } };
+		const live = foldTurnActivity([completed, write, reply('answer', 2)], { newShell: true });
+		expect(live.deliveryByHostId.get('answer')?.delivery).toBeUndefined();
+	});
 	it.each(['completion only', 'error card', 'history slice'])(
 		'keeps an error summary without activity: %s',
 		(shape) => {
@@ -116,6 +269,24 @@ describe('new shell running turn', () => {
 			const classic = foldTurnActivity(logs, { keepLastTurnOpen: false });
 			expect(classic.logs).toBe(logs);
 			expect(classic.activityByHostId.size).toBe(0);
+		}
+	);
+
+	it.each([false, true])(
+		'keeps the delivered answer visible before process exit, newShell=%s',
+		(newShell) => {
+			const answer = reply('answer', 3);
+			const result = foldTurnActivity([user('u', 0), tool('tool', 1), answer], {
+				newShell,
+				keepLastTurnOpen: true,
+			});
+			expect(result.logs).toContain(answer);
+			if (newShell) {
+				expect(result.activityByHostId.get('tool')).toMatchObject({
+					running: true,
+					entries: [tool('tool', 1)],
+				});
+			} else expect(result.activityByHostId.size).toBe(0);
 		}
 	);
 

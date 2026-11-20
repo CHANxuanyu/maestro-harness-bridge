@@ -86,15 +86,6 @@ stop team
 | `--team <id>` | Team id or unique prefix | -       |
 | `--json`      | Machine-readable result  | -       |
 
-## `maestro-cli team accept`
-
-accept team
-
-| Option        | Description              | Default |
-| ------------- | ------------------------ | ------- |
-| `--team <id>` | Team id or unique prefix | -       |
-| `--json`      | Machine-readable result  | -       |
-
 ## `maestro-cli team export`
 
 export team
@@ -103,6 +94,47 @@ export team
 | ------------- | ------------------------ | ------- |
 | `--team <id>` | Team id or unique prefix | -       |
 | `--json`      | Machine-readable result  | -       |
+
+## `maestro-cli team accept`
+
+Accept a demonstration or the listed leftovers
+
+| Option        | Description                                            | Default |
+| ------------- | ------------------------------------------------------ | ------- |
+| `--team <id>` | Team id or unique prefix                               | -       |
+| `--json`      | Machine-readable result                                | -       |
+| `--with-gaps` | Accept unmet items from the incomplete progress report | -       |
+
+## `maestro-cli team extend`
+
+Add explicit time or turns to the overall budget
+
+| Option            | Description              | Default |
+| ----------------- | ------------------------ | ------- |
+| `--team <id>`     | Team id or unique prefix | -       |
+| `--json`          | Machine-readable result  | -       |
+| `--hours <hours>` | Additional hours         | -       |
+| `--turns <turns>` | Additional turns         | -       |
+
+## `maestro-cli team seat <action> <seat> [model]`
+
+Set a seat model or substitute, or wait for recovery
+
+| Option        | Description                                         | Default |
+| ------------- | --------------------------------------------------- | ------- |
+| `--team <id>` | Team id or unique prefix                            | -       |
+| `--json`      | Machine-readable result                             | -       |
+| `--wait`      | Suspend this seat until its original model recovers | -       |
+
+## `maestro-cli team action <action>`
+
+Request push, draftPr, or an owner-only external action
+
+| Option          | Description                          | Default |
+| --------------- | ------------------------------------ | ------- |
+| `--team <id>`   | Team id or unique prefix             | -       |
+| `--json`        | Machine-readable result              | -       |
+| `--note <text>` | Concrete action and publication body | -       |
 
 ## `maestro-cli team show <section>`
 
@@ -123,18 +155,42 @@ Answer an owner card
 | `--json`        | Machine-readable result  | -       |
 | `--note <text>` | Decision note            | -       |
 
-## `maestro-cli team baseline <action>`
+## `maestro-cli team baseline <action> [criterion] [replacement]`
 
-Confirm the proposed baseline
+Confirm, edit, diff or return the baseline
 
-| Option        | Description              | Default |
-| ------------- | ------------------------ | ------- |
-| `--team <id>` | Team id or unique prefix | -       |
-| `--json`      | Machine-readable result  | -       |
+| Option           | Description                       | Default |
+| ---------------- | --------------------------------- | ------- |
+| `--team <id>`    | Team id or unique prefix          | -       |
+| `--json`         | Machine-readable result           | -       |
+| `--text <text>`  | Replacement criterion text        | -       |
+| `--note <text>`  | Reason for returning the baseline | -       |
+| `--proof <kind>` | Proof source: app, qa or pm       | -       |
+| `--how <text>`   | How the criterion will be proven  | -       |
+
+## `maestro-cli team residual <action> <item>`
+
+Assign the owner of an accepted residual item
+
+| Option           | Description                                  | Default |
+| ---------------- | -------------------------------------------- | ------- |
+| `--team <id>`    | Team id or unique prefix                     | -       |
+| `--json`         | Machine-readable result                      | -       |
+| `--owner <name>` | Follow-up owner; empty clears the assignment | -       |
+
+## `maestro-cli team log`
+
+Read the exact assigned prompts and seat replies
+
+| Option          | Description              | Default |
+| --------------- | ------------------------ | ------- |
+| `--team <id>`   | Team id or unique prefix | -       |
+| `--json`        | Machine-readable result  | -       |
+| `--seat <seat>` | pm, dev or qa            | -       |
 
 ## `maestro-cli team say <text>`
 
-Queue an owner message for PM
+Deliver an owner message to PM or a named seat
 
 | Option        | Description              | Default |
 | ------------- | ------------------------ | ------- |
@@ -293,6 +349,17 @@ List open terminal tabs in the desktop app (all agents unless --agent is given)
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------- |
 | `-a, --agent <id>` | List this agent’s terminals; new shell also includes its directory pool and terminals still running on its previous host | -       |
 | `--json`           | Output as JSON (for scripting)                                                                                           | -       |
+
+## `maestro-cli models <provider>`
+
+Read the provider model catalog and cached quota (requires desktop)
+
+| Option                 | Description                                             | Default |
+| ---------------------- | ------------------------------------------------------- | ------- |
+| `--agent <id>`         | Use a stored agent account and host                     | -       |
+| `--account-dir <path>` | Use an explicit provider account directory              | -       |
+| `--ssh-remote <id>`    | Use a remote host (typed catalog currently unsupported) | -       |
+| `--json`               | Output the full typed catalog as JSON                   | -       |
 
 ## `maestro-cli open-project <path>`
 

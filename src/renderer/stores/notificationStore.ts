@@ -142,8 +142,8 @@ export interface NotificationStoreActions {
 	removeToast: (id: string) => void;
 	/** Clear all visible toasts. */
 	clearToasts: () => void;
-	/** Add a toast to the history as unread. Internal - notifyToast() calls this. */
-	recordNotification: (toast: Toast) => void;
+	/** Add a toast to history, unread unless already seen. Internal - notifyToast() calls this. */
+	recordNotification: (toast: Toast, read?: boolean) => void;
 	/** Mark one history entry read. */
 	markNotificationRead: (id: string) => void;
 	/** Mark every history entry read. */
@@ -231,7 +231,7 @@ export const useNotificationStore = create<NotificationStore>()((set) => ({
 	},
 
 	// --- Notification history ---
-	recordNotification: (toast) => {
+	recordNotification: (toast, read = false) => {
 		const sessionId =
 			toast.sessionId ??
 			(toast.clickAction && 'sessionId' in toast.clickAction
@@ -248,7 +248,7 @@ export const useNotificationStore = create<NotificationStore>()((set) => ({
 			project: toast.project ?? session?.name,
 			group: toast.group ?? groups.find((g) => g.id === session?.groupId)?.name,
 			tabName: toast.tabName ?? (tab ? getTabDisplayName(tab) : undefined),
-			read: false,
+			read,
 		};
 		persistNotificationHistoryChange({ action: 'append', record });
 		set((s) => ({ history: [record, ...s.history].slice(0, NOTIFICATION_HISTORY_LIMIT) }));
@@ -393,6 +393,8 @@ const autoDismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
  */
 export type NotifyToastInput = Omit<Toast, 'id' | 'timestamp' | 'color' | 'type'> & {
 	color?: ToastColor;
+	/** The completion was already visible; retain it without lighting the bell. */
+	historyRead?: boolean;
 	/** @deprecated Use `color`. */
 	type?: ToastType;
 };
@@ -446,8 +448,9 @@ export function notifyToast(toast: NotifyToastInput): string {
 				? config.defaultDuration * 1000
 				: 0;
 
+	const { historyRead, ...toastFields } = toast;
 	const newToast: Toast = {
-		...toast,
+		...toastFields,
 		id,
 		color,
 		type: legacyType,
@@ -461,7 +464,7 @@ export function notifyToast(toast: NotifyToastInput): string {
 	}
 
 	if (!toast.skipHistory) {
-		store.recordNotification(newToast);
+		store.recordNotification(newToast, historyRead);
 	}
 
 	if (toast.historyOnly) return id;

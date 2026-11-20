@@ -27,7 +27,7 @@ import {
 	findAllBinaryPaths,
 	getExpandedEnv,
 } from './path-prober';
-import { AGENT_DEFINITIONS, type AgentConfig } from './definitions';
+import { AGENT_DEFINITIONS, CLAUDE_MODEL_ALIASES, type AgentConfig } from './definitions';
 import { resolveConfigDirKeyFromEnv } from './claudeSpawnCore';
 import { discoverModelsFromLocalConfigs } from './opencode-config';
 import { isWindows } from '../../shared/platformDetection';
@@ -90,18 +90,6 @@ async function fetchCopilotModelsFromApi(): Promise<string[] | null> {
 }
 
 // ============ Claude Code model discovery ============
-
-/**
- * Tier aliases Claude Code always accepts, each resolving to the current model
- * in that tier. `[1m]` variants select the 1M extended context window and need
- * extra usage enabled at claude.ai/settings/usage; the CLI offers them for opus
- * and sonnet only.
- *
- * Not every model has an alias - limited-access models are reachable only by
- * their full ID - so this list is a floor, never the whole picture. The sources
- * below fill in the rest.
- */
-const CLAUDE_MODEL_ALIASES = ['fable', 'sonnet', 'opus', 'haiku', 'opus[1m]', 'sonnet[1m]'];
 
 /**
  * Model catalog the Claude Code CLI caches to render its own `/model` picker,

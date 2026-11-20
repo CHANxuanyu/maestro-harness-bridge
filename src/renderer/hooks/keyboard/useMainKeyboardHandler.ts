@@ -1,3 +1,4 @@
+import { useTeamStore } from '../../stores/teamStore';
 import { openUiSurface } from '../../utils/openUiSurface';
 import { shellRightPanelTab } from '../../../shared/newShellPanel';
 import { shellFeatureVisible } from '../../../shared/newShellFeatures';
@@ -166,11 +167,13 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 			// the store so App does not need to push a live Session object onto this ref.
 			let ctx = keyboardHandlerRef.current;
 			if (!ctx) return;
-			const activeSession = selectActiveSession(useSessionStore.getState());
 			const newShell = useSettingsStore.getState().newShell;
+			const teamActive = newShell && !!useTeamStore.getState().activeTeamId;
+			const activeSession = teamActive ? null : selectActiveSession(useSessionStore.getState());
 			if (newShell)
 				ctx = {
 					...ctx,
+					activeSessionId: teamActive ? null : ctx.activeSessionId,
 					activeGroupChatId: shellFeatureVisible('groupChat', newShell)
 						? ctx.activeGroupChatId
 						: null,
@@ -939,6 +942,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					useModalStore.getState().cyclePromptComposer();
 					trackShortcut('openPromptComposer');
 				}
+			} else if (ctx.isShortcut(e, 'createTeam')) {
+				e.preventDefault();
+				if (openUiSurface('create-team').ok) trackShortcut('createTeam');
 			} else if (ctx.isShortcut(e, 'openModelEffort')) {
 				e.preventDefault();
 				// AI-only, and never while a group chat owns the view - see
@@ -946,7 +952,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				// target rather than to nothing. It also resolves through
 				// resolveActiveTabRef, so a focused pane in a tiled group is retuned
 				// rather than the standalone tab hidden behind it.
-				const modelEffortTabId = resolveModelEffortTabId(activeSession, ctx.activeGroupChatId);
+				const modelEffortTabId = useTeamStore.getState().activeTeamId
+					? null
+					: resolveModelEffortTabId(activeSession, ctx.activeGroupChatId);
 				if (modelEffortTabId) {
 					useModalStore.getState().openModal('modelEffort', { tabId: modelEffortTabId });
 					trackShortcut('openModelEffort');
@@ -1006,7 +1014,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				// resolves it per event), and a missing property here made the guard
 				// silently falsy - which, with preventDefault already called, swallowed
 				// the keystroke with no visible effect.
-				const searchSession = selectActiveSession(useSessionStore.getState());
+				const searchSession = activeSession;
 				// Group chats have no AI tabs to search across. preventDefault only when
 				// we actually act, so an inapplicable context falls through instead of
 				// eating the key.
@@ -1015,7 +1023,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.handleOpenCrossTabSearch?.();
 					trackShortcut('searchAllTabs');
 				}
-			} else if (ctx.isShortcut(e, 'viewGitDiff') && !ctx.activeGroupChatId) {
+			} else if (ctx.isShortcut(e, 'viewGitDiff') && !ctx.activeGroupChatId && !teamActive) {
 				e.preventDefault();
 				ctx.handleViewGitDiff();
 				trackShortcut('viewGitDiff');
@@ -1025,7 +1033,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.setGitLogOpen(true);
 					trackShortcut('viewGitLog');
 				}
-			} else if (ctx.isShortcut(e, 'gitPull') && !ctx.activeGroupChatId) {
+			} else if (ctx.isShortcut(e, 'gitPull') && !ctx.activeGroupChatId && !teamActive) {
 				// The remaining branch-pill actions. All four fire the SAME action set
 				// the pill menu and Cmd+K fire (published by GitShortcutActionsBridge),
 				// so a chord can't drift from the menu row it mirrors. preventDefault
@@ -1037,21 +1045,21 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					git.pull();
 					trackShortcut('gitPull');
 				}
-			} else if (ctx.isShortcut(e, 'gitPush') && !ctx.activeGroupChatId) {
+			} else if (ctx.isShortcut(e, 'gitPush') && !ctx.activeGroupChatId && !teamActive) {
 				const git = getGitShortcutActions();
 				if (git?.isGitRepo) {
 					e.preventDefault();
 					git.push();
 					trackShortcut('gitPush');
 				}
-			} else if (ctx.isShortcut(e, 'gitChangeBranch') && !ctx.activeGroupChatId) {
+			} else if (ctx.isShortcut(e, 'gitChangeBranch') && !ctx.activeGroupChatId && !teamActive) {
 				const git = getGitShortcutActions();
 				if (git?.isGitRepo) {
 					e.preventDefault();
 					git.switchBranch();
 					trackShortcut('gitChangeBranch');
 				}
-			} else if (ctx.isShortcut(e, 'gitCreatePR') && !ctx.activeGroupChatId) {
+			} else if (ctx.isShortcut(e, 'gitCreatePR') && !ctx.activeGroupChatId && !teamActive) {
 				// canCreatePR, not isGitRepo: a repo with no resolved branch has no
 				// source to open a PR from, which is the same reason the pill menu
 				// omits the row.

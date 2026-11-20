@@ -5,18 +5,23 @@ import { updateAiTab, useSessionStore } from '../stores/sessionStore';
 import { useT } from '../i18n';
 import { ConversationAutomationCards } from './ConversationAutomationCards';
 
-export function ConversationCheckDelivery({
-	sessionId,
-	tabId,
-	turnId,
-	checkRunId,
-}: {
+interface CheckDeliveryTarget {
 	sessionId: string;
 	tabId: string;
 	turnId: string;
 	checkRunId?: string;
-}) {
-	const t = useT();
+}
+
+/**
+ * What a finished turn's check evidence shows, if anything. The delivery bar asks
+ * this before drawing itself, so a turn with nothing to report adds no row.
+ */
+export function useConversationCheckDelivery({
+	sessionId,
+	tabId,
+	turnId,
+	checkRunId,
+}: CheckDeliveryTarget) {
 	const target = { kind: 'conversation' as const, sessionId, tabId };
 	const state = useConversationAutomationStore((s) => s.states[conversationKey(target)]);
 	const latestTurnId = useSessionStore(
@@ -40,8 +45,17 @@ export function ConversationCheckDelivery({
 	const ranChecks = batch?.checks.some(
 		(check) => check.outcome === 'pass' || check.outcome === 'fail'
 	);
-	const showCards = state && turnId === latestTurnId;
-	if (!hasChecks && !showCards) return null;
+	const showCards = !!state && turnId === latestTurnId;
+	return { state, batch, failed, hasChecks, ranChecks, showCards, visible: hasChecks || showCards };
+}
+
+export function ConversationCheckDelivery(props: CheckDeliveryTarget) {
+	const { sessionId, tabId } = props;
+	const t = useT();
+	const target = { kind: 'conversation' as const, sessionId, tabId };
+	const { state, batch, failed, hasChecks, ranChecks, showCards, visible } =
+		useConversationCheckDelivery(props);
+	if (!visible) return null;
 	return (
 		<div className="w-full space-y-2" data-testid="conversation-check-delivery">
 			{hasChecks && (
@@ -84,7 +98,7 @@ export function ConversationCheckDelivery({
 						.join('\n')}
 				</pre>
 			)}
-			{showCards && (
+			{showCards && state && (
 				<ConversationAutomationCards
 					state={state}
 					act={async (action) => {

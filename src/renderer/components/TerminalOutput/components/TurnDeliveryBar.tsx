@@ -4,7 +4,10 @@ import type { AgentTaskList } from '../../../utils/agentTaskList';
 import { useT } from '../../../i18n';
 import { updateAiTab } from '../../../stores/sessionStore';
 import { patchNewShellPanel } from '../../../../shared/newShellPanel';
-import { ConversationCheckDelivery } from '../../ConversationCheckDelivery';
+import {
+	ConversationCheckDelivery,
+	useConversationCheckDelivery,
+} from '../../ConversationCheckDelivery';
 
 export const TurnDeliveryBar = memo(function TurnDeliveryBar({
 	turnId,
@@ -26,6 +29,14 @@ export const TurnDeliveryBar = memo(function TurnDeliveryBar({
 }) {
 	const t = useT();
 	const hasFiles = delivery && delivery.files > 0;
+	const checks = useConversationCheckDelivery({
+		sessionId,
+		tabId,
+		turnId,
+		checkRunId: delivery?.checkRunId,
+	});
+	// No placeholder row: a turn with no files, tasks or check evidence draws nothing.
+	if (!hasFiles && !plan && !checkResult && !checks.visible) return null;
 	return (
 		<div
 			className="px-3 sm:px-6 pb-3 text-xs"

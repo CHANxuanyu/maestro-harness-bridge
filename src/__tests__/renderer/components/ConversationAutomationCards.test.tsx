@@ -10,6 +10,7 @@ import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { FollowUpsPanel } from '../../../renderer/components/FollowUpsPanel';
 import { ChecksPanel } from '../../../renderer/components/ChecksPanel';
 import { createMockAITab, createMockSession } from '../../helpers';
+import { TurnDeliveryBar } from '../../../renderer/components/TerminalOutput/components/TurnDeliveryBar';
 
 describe('conversation automation cards', () => {
 	let state: ConversationAutomationState;
@@ -34,6 +35,26 @@ describe('conversation automation cards', () => {
 			notes: [],
 		};
 	});
+	it('draws the delivery bar for a turn without files only when its conversation has checks', () => {
+		const bar = (
+			<TurnDeliveryBar
+				sessionId="s"
+				tabId="t"
+				turnId="turn"
+				textColor="#888"
+				plan={null}
+				delivery={{ files: 0, additions: 0, deletions: 0, paths: [] }}
+			/>
+		);
+		const { rerender } = render(bar);
+		expect(screen.queryByTestId('turn-delivery')).toBeNull();
+		useConversationAutomationStore.getState().replace([state]);
+		rerender(bar);
+		expect(screen.getByTestId('turn-delivery')).toContainElement(
+			screen.getByTestId('conversation-check-delivery')
+		);
+	});
+
 	it.each(['en', 'zh-CN'] as const)(
 		'has one expiry decision, readable limits and a panel link in %s',
 		(locale) => {

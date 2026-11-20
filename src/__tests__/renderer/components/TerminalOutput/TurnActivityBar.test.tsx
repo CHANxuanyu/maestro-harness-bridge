@@ -211,20 +211,23 @@ describe('activity and delivery', () => {
 		expect(screen.getByTestId('turn-delivery').textContent).toBe('Changed 2 files · +9 -1');
 	});
 
-	it.each([0, null])('hides the zero-file and absent-check chips with line counts %s', (count) => {
-		render(
-			<TurnDeliveryBar
-				sessionId="s"
-				tabId="t"
-				turnId="u"
-				textColor={mockTheme.colors.textDim}
-				plan={null}
-				delivery={{ files: 0, additions: count, deletions: count, paths: [] }}
-			/>
-		);
-		expect(screen.getByTestId('turn-delivery').textContent).toBe('');
-		expect(screen.queryByRole('button', { name: /Changed/ })).toBeNull();
-	});
+	it.each([0, null])(
+		'hides a zero-file delivery without checks even with line counts %s',
+		(count) => {
+			render(
+				<TurnDeliveryBar
+					sessionId="s"
+					tabId="t"
+					turnId="u"
+					textColor={mockTheme.colors.textDim}
+					plan={null}
+					delivery={{ files: 0, additions: count, deletions: count, paths: [] }}
+				/>
+			);
+			// Nothing to report draws no row at all, so the transcript does not grow.
+			expect(screen.queryByTestId('turn-delivery')).toBeNull();
+		}
+	);
 
 	it('keeps plan and check results without a zero-file chip or absent-file placeholder', () => {
 		const deliveryProps = {
@@ -234,7 +237,7 @@ describe('activity and delivery', () => {
 			textColor: mockTheme.colors.textDim,
 		};
 		const { rerender } = render(<TurnDeliveryBar {...deliveryProps} plan={null} />);
-		expect(screen.getByTestId('turn-delivery').textContent).toBe('');
+		expect(screen.queryByTestId('turn-delivery')).toBeNull();
 		rerender(
 			<TurnDeliveryBar
 				{...deliveryProps}

@@ -14,6 +14,10 @@ vi.mock('../../../main/utils/cliDetection', () => ({
 	getExpandedEnv: () => ({ ...process.env }),
 }));
 
+// Windows forbids control characters in file names; keep the quoting case with spaces.
+const ODD_FILE_NAME =
+	process.platform === 'win32' ? 'new file with spaces' : 'new file\nwith newline';
+
 describe('team workspaces', () => {
 	let root: string;
 	let project: string;
@@ -73,6 +77,8 @@ describe('team workspaces', () => {
 		await git(project, 'config', 'user.email', 'fixture@example.invalid');
 		await git(project, 'config', 'commit.gpgsign', 'false');
 		await git(project, 'config', 'core.hooksPath', path.join(root, 'no-hooks'));
+		// Byte-exact checkouts: Windows runners default core.autocrlf to true.
+		await git(project, 'config', 'core.autocrlf', 'false');
 		await fs.mkdir(path.join(project, 'src'));
 		await fs.writeFile(path.join(project, 'src/code.txt'), 'original\n');
 		await fs.writeFile(path.join(project, 'deleted.txt'), 'keep\n');
@@ -117,7 +123,7 @@ describe('team workspaces', () => {
 		await fs.rm(path.join(state.qa, 'deleted.txt'));
 		await fs.rename(path.join(state.qa, 'mode.txt'), path.join(state.qa, 'renamed.txt'));
 		await fs.writeFile(path.join(state.qa, 'ignored-output'), 'not allowed');
-		await fs.writeFile(path.join(state.qa, 'new file\nwith newline'), 'not allowed');
+		await fs.writeFile(path.join(state.qa, ODD_FILE_NAME), 'not allowed');
 		await git(state.qa, 'add', '-A');
 		const restored = await workspaces.enforceQaBoundary();
 		expect(restored).toEqual(
@@ -127,7 +133,7 @@ describe('team workspaces', () => {
 				'mode.txt',
 				'renamed.txt',
 				'ignored-output',
-				'new file\nwith newline',
+				ODD_FILE_NAME,
 			])
 		);
 		expect(await fs.readFile(path.join(state.qa, 'src/code.txt'), 'utf8')).toBe('original\n');
@@ -202,6 +208,8 @@ describe('team workspaces', () => {
 				host: { kind: 'ssh', remoteId: 'remote' },
 			})
 		).toThrow('SSH');
+		// Git for Windows hides `.git`, and Windows refuses to truncate a hidden file.
+		await fs.rm(path.join(state.qa, '.git'));
 		await fs.writeFile(path.join(state.qa, '.git'), `gitdir: ${path.join(project, '.git')}\n`);
 		await expect(workspaces.enforceQaBoundary()).rejects.toThrow('Git identity changed');
 		expect(await fs.readFile(path.join(project, 'src/code.txt'), 'utf8')).toBe('original\n');

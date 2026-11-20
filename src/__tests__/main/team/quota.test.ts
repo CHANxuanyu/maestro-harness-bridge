@@ -1,3 +1,4 @@
+import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { teamQuotaSample } from '../../../main/team/quota';
 import { getSnapshot } from '../../../main/stores/claudeUsageStore';
@@ -27,7 +28,8 @@ describe('cached team quota preflight', () => {
 				now
 			)
 		).toMatchObject({ exhausted: true, resetsAt: now + 7_200_000 });
-		expect(getSnapshot).toHaveBeenCalledWith('/synthetic/seat');
+		// The account dir is resolved for the host, so Windows sees a drive-qualified path.
+		expect(getSnapshot).toHaveBeenCalledWith(path.resolve('/synthetic/seat'));
 	});
 	it('ignores a spent window after reset and does not assume an unknown reset', () => {
 		vi.mocked(getSnapshot).mockReturnValue({
@@ -48,7 +50,10 @@ describe('cached team quota preflight', () => {
 	});
 	it('reports the exact provider login and never applies subscription quota to an API key', () => {
 		vi.mocked(getAllCodexUsageSnapshots).mockReturnValue({
-			'/synthetic/.codex': { sampledAt: new Date(now).toISOString(), authState: 'unauthenticated' },
+			[path.join('/synthetic', '.codex')]: {
+				sampledAt: new Date(now).toISOString(),
+				authState: 'unauthenticated',
+			},
 		} as never);
 		expect(teamQuotaSample({ tool: 'codex' }, undefined, now)).toMatchObject({
 			login: true,

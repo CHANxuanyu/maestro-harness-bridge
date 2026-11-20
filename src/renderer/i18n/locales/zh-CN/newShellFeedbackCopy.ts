@@ -1,4 +1,5 @@
 export default {
+	'workflows.newShellCopy.feedback.justStarted': '刚开始',
 	'workflows.newShellCopy.feedback.updates.title': '更新偏好',
 	'workflows.newShellCopy.feedback.updates.intro':
 		'选择更新检查和崩溃报告偏好，之后可以在设置中更改。',

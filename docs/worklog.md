@@ -1,5 +1,397 @@
 # 分支工作记录
 
+## 2026-11-20：团队 PR 的 Windows 与 Linux 原生 CI
+
+PR 97 在 `21520dda5` 上 Windows 两个分片 12 项失败、Linux 原生任务两项超时后被 75 分钟上限取消。Windows：检查运行器把 `cmd /c` 找不到命令（退出码 1 和 cmd 的提示行）记为未运行；团队测试改为按主机解析账号目录、固定 `core.autocrlf=false`、Windows 上不用含换行的文件名、先删除隐藏的 `.git` 再写；原生临时目录用原生 realpath 展开 8.3 短名。Linux：强制退出改为杀掉 Electron 进程组（`NativeApp.forceQuit()`），Playwright 要等标准输出全部关闭才报告退出，只杀主进程时 Linux 辅助进程仍握着管道。本地 macOS 在旧提交和新提交上这两个场景都通过（11 到 14 秒），Linux 的原因据 Playwright 源码推断，以下一轮 CI 为准。原生任务上限改为 120 分钟，超时取消时也上传 `e2e-results/`。命令：团队相关单测 21 个文件 572 项通过；`npm run lint` 通过；`node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m3.spec.ts` 结果见 PR 评论。
+
+## 2026-11-18：M3 fix5/fix5b 集成
+
+在 `85da119c7` 合并 `86b915d4b` 的未完成合并上补齐 CLI 遗留项负责人测试的闭合，保留两侧测试，并给 M1 原生场景补上 `LedgerEvent` 类型导入。基线编辑退回回归只是匹配了旧版 JSON 空白；改为解析实际提示数据，增加退回意见、编辑记录、标准文字、证明方法和版本断言，脚本 PM 修改页脚及消息门控断言仍通过，没有改动运行时提示或调度规则。完整团队测试 530 项、4 份 TypeScript 检查、ESLint 和 27 个变更文件的 Prettier 检查通过，文档检查 746 条路径无缺失，完整命令见 M3 验证记录。本轮未运行 Electron，未暂存或提交。
+
+## 2026-11-18：M3 fix2/fix3 集成
+
+在 `838f3d31a` 合并 `f65c6933b` 的未完成合并上补齐基线质询历史、轮次和讨论边界 payload 类型，并在中英文卡片中显示。复现的 5 项失败来自旧的正文 JSON 断言和编辑后流程：保留硬预算、最多两轮质询、完整编辑质询和消息门控规则，调整 PM 确认样例保留老板改过的证明方法，退回测试先完成编辑触发的完整质询，原有版本、差异、脚注和消息顺序断言保留。完整团队测试 503 项、i18n 9 项、4 份 TypeScript 检查、ESLint 和 Prettier 通过，文档检查 742 条路径无缺失，命令见 M3 验证记录。用户此前的 40/40 原生通过属于 `838f3d31a`；本轮未运行 Electron，未暂存或提交，未实现后续 fix4。
+
+## 2026-11-18 M3 team renderer and merge resolution
+
+Resolved the in-progress M3 merge without staging or committing, retaining M2 baseline returns, message handling and human card bodies, plus M3 quota, takeover, waits and budget behavior. The merge gate passed 427 team tests and all four TypeScript projects before renderer work; takeover transcript lookup now follows the effective provider and launch source account. Added ledger-derived seat health, account login, app status, escalation/report detail, attempt history, residual ownership and cost surfaces in English and Chinese, with shared CLI/IPC assignment and reusable M3 native fixtures. Final verification passed 454 team tests, 70 adjacent renderer tests, the native fixture test, all four TypeScript projects, ESLint, Prettier and 740 documentation paths. Restart inspection retains a separate receipt from an earlier retry; both real-workspace regression cases fail before the fix and pass after it. Exact commands are recorded in `docs/round2/dev/team-m3-verification.md`; Electron, screenshots and real account recovery were not run here. The separate backend follow-up is not reimplemented.
+
+M3 UI 外部复检：用户运行六份原生场景，38 项通过、2 项失败。本轮读取失败截图、trace 和保留的 M1 台账，修复成功补报被 30 秒失败冷却误拦的问题，登录卡正文标明厂商与实际账号目录，结构化字段保留 provider ID。恢复与等待改用中英文说明，成员工作区加标签，侧栏接任标签保持单行，预算用完时不再显示手动暂停或恢复按钮。两个调度回归先失败后通过，完整团队测试 466 项、相邻组件和 i18n 70 项及四份 TypeScript 检查通过；ESLint、Prettier、文档检查结果和命令见 M3 验证记录。本轮未运行 Electron，未生成或加入截图，未暂存或提交合并。
+
+## 2026-11-18：M2 团队界面
+
+验证对象为合并 `eb53faa0a` 之上的未提交源码。修复 M1 合成 PM 脚本把消息处理误当评审的问题，保留真实调度的已处理回执；接入四步讨论、分层决定、基线编辑与差异及退回、标准变更、评审复盘、产出前后对比、增量演示和成员轮次记录，补齐中英文及 CLI 参数。新增共享脚本的 M2 UI 场景与中文评审路径；定向 Vitest 16 文件 341 项、最后界面复检 3 文件 58 项通过，renderer、main、CLI 及场景四份 TypeScript noEmit、ESLint、Prettier 均通过，文档检查 739 路径无缺失，原生场景只发现 15 项，未运行 Electron 或生成原生截图。检查命令和未验边界见 [M2 界面验证](round2/dev/team-m2-ui-verification.md)。
+
+M2 截图复检：查看用户提供的失败截图、trace 及讨论和标准变更截图，修复基线标签精确定位、按真实语言等待启动、消息最终已处理状态及送达顺序断言；讨论区分待决定与已决定、隐藏未来步骤并标注提案轮次，状态摘要压到两行并保留完整提示，标准变更说明两种选择后果。五条完整调度脚本按要求设 60 秒超时且不改断言；定向 Vitest 17 文件 352 项通过，最后启动助手复检 2 项通过，四份 TypeScript noEmit、变更文件 ESLint、Prettier 和 docs:verify 通过。未运行 Electron、未生成或加入截图，新的中英文原生验收待用户外部重跑；命令见同一验证记录。
+
+M2 第二次复检：用户外部运行 13/15 通过；两份失败台账都在退回讨论完成后停于空消息的 PM/开发准备回合，没有派发新的 PM respond。原因是合成脚本的消息门闩误拦了讨论准备，现仅拦含实际消息的回合；未改生产调度或放松场景断言。新增调度回归先复现失败，再验证 A1 编辑保留、退回意见进入 baselineReturns、PM 发布下一版并更新 E1、差异仅含 E1，且真实消息仍按门闩送达后处理。定向 Vitest 17 文件 353 项、四份 TypeScript noEmit、ESLint、Prettier 通过，docs:verify 检查 739 路径无缺失。本轮未运行 Electron，未提交；精确检查结果见 [M2 界面验证](round2/dev/team-m2-ui-verification.md)。
+
+## 2026-11-18：A1c 第三轮布局与终态输入
+
+验证对象为 `75f2537c7` 之上的未提交源码。查看用户提供的三张 fix2 截图后，将左栏入口改为全宽上下排列、终态标签改为带完整提示的小圆点，团队侧栏改为默认 520 px 的可调宽面板和带溢出渐隐的下划线页签；产出列表直接展开，列表连接使用界面语言，终态禁用发言并只留一个导出入口，暂停仍可排队。定向 Vitest 9 文件 144 项、三份 TypeScript noEmit、变更文件 ESLint 和 Prettier 均通过，文档检查 734 路径无缺失，diff 与禁用破折号检查通过。本轮没有运行 Electron；中英文默认及最窄左栏、侧栏收窄后的实际布局仍待用户截图验收。没有提交或加入截图。
+第四轮查看 fix3 截图后，侧栏默认改回普通右栏的 384 px、页签水平内边距收为 8 px，标题先截断并保持操作同排，阶段分隔符移出标签且需要你徽标固定在滚动区外，产出预览链接单行左对齐；定向 Vitest 9 文件 147 项、三份 TypeScript noEmit、变更文件 ESLint 和 Prettier 通过，未运行 Electron，1400 × 900 中英文实际布局待用户复核。
+
+## 2026-11-17：A1c 第二轮截图修正与终态总结
+
+验证对象仍是基于 `5ac69fdd2c2fcb2440aa0b6e81c16f897798da45` 的本 worktree
+未提交源码，不是发行包。已查看用户提供的 baseline 和 demo 两张本地截图，
+对照 P7.1 原型修正；没有把截图加入公共文档或重新生成 Electron 截图。
+
+真实调度器仅记录 `accepted` 或 `stopped` 就能进入终态，原 feed 却只在收到
+`terminal` 时渲染总结。现在从 `state.terminal` 渲染唯一的“这次协作”卡片，
+始终放在阶段折叠外，覆盖全部达标、带缺口验收和停止。总结读取共享 reducer
+的决定、主动消息、讨论、评审打回、复盘、恢复、替补、唤醒和回合统计，以及
+实际标准变更、残余问题和建议；没有按原型路径填固定数字。主动消息按消息
+身份、唤醒按派发身份计数，重放和送达回执不重复计数。
+
+基线后端卡片分离可读 `body` 与结构化 `payload`，保留 PM 的人类问题用于 CLI。
+唯一客户端适配器兼容旧 JSON body；界面展示标准、范围与原型的检查试跑说明。
+预算报告也不再在正文拼 JSON。基线和验收不显示边界文字，升级卡只显示一次，
+保留 `data-boundary`。成员标签通过现有目录 hook 按岗位账号读取厂商模型与档位
+名字，历史事件仍取当时模型，未知条目才回退到 ID。选择器共用同一档位名字函数。
+
+主视图和右栏去掉 Esc 控件及主视图的模态注册，成员返回与建队弹窗保留 Esc。
+应用 job 跟进的内部结算行不再进入 feed，真实成员跟进仍保留。演示先展示产出，
+文件名相对工作区显示，实际读取保持原路径；第三个按钮改为“看改动”。无普通
+对话时顶栏仍并列提供“新对话”和“新建团队”，前者复用已有打开项目流程。
+中文测试实际设置 `uiLanguage: 'zh-CN'`，覆盖基线、边界、总结、目录名字与导航。
+
+保留用户对问题修复状态竞态的调整：等待修复声明或核验结束，再查台账确认开发
+声明在 QA 核验之前。场景增加可读基线、目录名、相对文件名和总结统计断言，
+终态截图前滚到总结卡。可选截图变量与共享三岗位夹具继续复用。
+
+验证命令与结果：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/ModelEffortPicker.test.tsx src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/i18n/messages.test.tsx src/__tests__/shared/team/ledger.test.ts src/__tests__/main/team/scheduler.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg '\.(ts|tsx|md|json)$')
+npx playwright test e2e/native-team.spec.ts e2e/native-team-ui.spec.ts --project=native --list
+npm run docs:verify
+git diff --check
+```
+
+定向 Vitest 9 文件、158 项通过，无跳过；三份 TypeScript 检查通过。
+ESLint（含变更测试）、Prettier、diff 检查和禁用破折号扫描通过。
+文档路径检查 734 个、0 缺失。Playwright 仅发现 2 文件的 2 场景，没有运行。
+
+没有运行 Electron、真实模型或发行包，没有提交。用户给出的截图证明的是修复前
+界面；本轮视觉效果、完整 UI 接受路径及新终态截图仍待沙箱外运行。其他终态
+只在 reducer 和 renderer 测试中验证，未跑完整 Electron 分支。没有新增后端桩，
+基线编辑、差异和退回仍保持原有关闭的 feature gates。
+
+## 2026-11-17：A1c 后端接入后的左栏可达性与 UI 场景
+
+验证对象是基于 `5ac69fdd2c2fcb2440aa0b6e81c16f897798da45` 的本 worktree
+未提交源码，不是发行包。真实团队后端已合入。修复两处可达性门槛：没有普通
+对话时仍挂载项目左栏；团队所属路径不在树中时用同一个项目行补出项目，按
+主机和路径归属复用已有项目。搜索、提供方和未读过滤不移除团队项目，终态
+团队保留；停止后的未答卡片和迟到退出不再遮住终态标签。
+
+演示卡接管真实后端的 acceptance 边界，开放“验收”按钮而不重复另一张老板
+卡片。`teamClient` 从真实 preload 契约取类型，并处理 `get` 的空结果。
+成员原生历史读取增加岗位实际账号目录，由 main 使用既有账号解析器返回，
+renderer 仍走只读 `agentSessions.read` 和既有 transcript 组件。
+
+新增 `e2e/native-team-ui.spec.ts`，与后端场景共用
+`e2e/fixtures/native-team.ts` 中的三岗位脚本、独立账号、台账读取和释放门。
+场景从没有对话的窗口经 IPC 建队，随后点击真实左栏、基线确认、发送和演示
+验收按钮。断言标题/预算、七阶段、现状四格、需求/质询/基线/检查/问题链/
+评审/演示顺序、先产出后总结、PM 排队与送达、原生成员历史、Esc 焦点返回及
+验收后仍可选的团队行。`MAESTRO_E2E_SHOTS` 可保存 baseline、demo、terminal
+三张截图；默认不额外保存这些阶段图。
+
+验证命令与结果：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/utils/projectSessionTree.test.ts src/__tests__/main/team/scheduler.test.ts src/__tests__/main/team/ipc.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+npx playwright test e2e/native-team.spec.ts e2e/native-team-ui.spec.ts --project=native --list
+npm run docs:verify
+git diff --check
+```
+
+定向 Vitest 8 文件、133 项通过；renderer、main 和场景三个 TypeScript 检查
+通过；ESLint（含变更测试）与 Prettier 通过。Playwright 发现 2 文件中的
+2 个场景，没有执行测试。文档检查 734 个路径、0 缺失，diff 检查及变更文件
+禁用破折号扫描通过。
+
+本轮按要求没有运行 Electron，也没有生成阶段截图。TypeScript 和 Playwright
+收集只验证场景可编译/发现，不能代替 UI 验收。待用户在沙箱外以本次源码构建
+后运行新场景，检查实际截图、原生历史账号隔离和焦点。旧后端场景提取助手后
+也未重跑 Electron。SSH、其他终态分支的完整运行及 Windows/Linux 未验证。
+基线编辑、差异、退回仍在原有关闭的 feature gates 后；本次没有新增后端桩。
+
+## 2026-11-17：A1c 团队群聊界面
+
+验证对象是基于 `5a8a8914d6bcb14989e79ea86d865feb524eabe8` 的本 worktree
+未提交源码，不是发行包。移植 P7.1 的团队场景：左栏建队入口与三岗位树、
+主视图标题和预算、七阶段、现状四格、历史阶段折叠、台账卡片、发言区，
+以及产出、进展、决定、证据、成员、改动六个侧栏页签。演示先展示产出，
+验收后仍可见；旧阶段收起，未答的老板卡片始终在折叠外。
+
+默认路径合成台账覆盖需求与标准、独立质询、基线确认、完整讨论、应用检查、
+问题状态链、额度和替补、打回及通过的产品评审、演示、消息投递、跟进和终态。
+需求、检查、讨论与证据沿用原型的展开层级；成员标签保留事件发生时的模型。
+老板卡片共用一种组件，附 `data-boundary`，推荐项在前，有代价与边界，
+不接受单独的“继续”选项。答复成功不乐观删除卡片，以后端事件为准。
+
+建队对话框复用 `ModelEffortPicker policy="team-seat"`，包括可选替补；
+四项授权默认勾选，40 回合，保留固定的始终询问清单和厂商来源说明。
+未打开选择器时也为已解析的 Codex 模型固定允许的强度，避免原生 Ultra
+默认值漏过团队策略。Esc、可见关闭、Tab 陷阱和选择器焦点返回使用既有组件。
+SSH 使用有效远程路径，缺主机时禁止误建成本机团队。成员对话经
+`seatTranscript` 和 `agentSessions.read({ readOnly: true })` 读取，复用
+`SessionMessagesView`，Esc 返回团队并把焦点还给成员行。改动复用既有
+`ChangesPanel` 的只读工作区模式。离开团队回到普通对话时恢复原有面板。
+
+台账镜像先订阅再读快照，按事件身份合并竞态，按团队保存还原结果，断开后
+丢弃迟到读取。唯一适配层为 `services/teamClient.ts`；没有内置运行时演示数据。
+服务缺席时显示未就绪。快捷键、菜单、命令面板和 `open create-team` 共用入口，
+团队显示时隐藏对话的删除、模型与 Git 快捷操作不会落到后台对话上。
+
+定向 Vitest 12 文件、364 项通过，包含团队新增测试及受影响的 shell、左栏、
+模型选择器、改动、键盘、表面注册和翻译测试。执行命令：
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team src/__tests__/renderer/components/ChangesPanel.test.tsx src/__tests__/renderer/components/ModelEffortPicker.test.tsx src/__tests__/renderer/components/AppShell.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/utils/openUiSurface.test.ts src/__tests__/renderer/constants/shortcuts.test.ts src/__tests__/shared/uiSurfaces.test.ts src/__tests__/renderer/i18n/messages.test.tsx src/__tests__/renderer/hooks/useMainKeyboardHandler.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+npm run docs:verify
+git diff --check
+```
+
+Vitest 默认配置加载器试图写入外部链接的依赖目录而被拒绝，故使用 runner
+加载器且禁用缓存。TypeScript、ESLint（含测试）、Prettier、文档路径和 diff
+检查通过；新增文件与变更文件没有禁用的两种破折号。
+
+待接入：真实 `window.maestro.team` 服务及事件，创建和列表暂按返回
+`TeamConfig` / `TeamConfig[]` 声明；导出只调用约定方法，保存与返回值语义
+待后端确认。基线编辑、差异、退回的控件与回调留在关闭的 feature gates 后。
+额度卡片展示替补事实和成员入口，原型“等原模型恢复”的主动切回没有对应
+后端方法，暂不提供。其余分支复用卡片但不宣称 M2/M3 验收完成；`team` CLI
+对等由并行后端任务补齐。
+
+未验证：真实团队派发、账号隔离下的成员历史、真实产出采集与导出保存、SSH
+团队、重启持久化、打包应用中的视觉和键盘走查、Windows/Linux。系统 Chrome
+启动被当前沙箱拒绝，没有用 jsdom 当作截图验收。按任务要求没有编写或运行
+Electron 场景。没有提交或发布；原有 `.survey-A0.md` 未改动。
+
+## 2026-11-18: B2-perf streaming turn projection (PRD 4.4)
+
+Tested artifact: `bd575139d` plus this worktree's uncommitted changes on
+`codex/round2-b2-stream-perf`. No build, release, commit or native scenario changes.
+
+The reported same-machine, interleaved six-round comparison was frozen
+`79bd2ecac` versus B1/B2 mainline: stream key-delay p95 median 83.4 -> 88.3 ms,
+next-frame p95 86.3 -> 91.4 ms, renderer script 872 -> 973 ms, long tasks 0 -> 0.
+The recorded PRD 4.4 reference remains 85.7 ms (2026-11-12, Apple M4,
+`docs/perf-renderer.md`). Those are the user's Electron measurements, not this
+sandbox's results.
+
+Root cause: every new logs array rebuilt all finished turn folds, including
+outcome checks, historical write attribution, delivery summaries and plan lookup.
+`collapseAiResponseLogs()` also recreated unchanged response objects, defeating
+an entry-identity cache. Existing activity redraw tests missed these derivations
+because they happen before React's memo comparator.
+
+- The new jsdom regression fully backfills 2,000 finished turns (7,000 raw entries,
+  including both single-entry and merged replies), then streams 15 answer chunks.
+  Before the fix it fails with 30,000 `collectTurnWrites()` calls over 90,000 input
+  entries and 30,000 `latestAgentTaskList()` calls over 60,000 input entries.
+  Per chunk: 2,000 delivery scans / 6,000 entries and 2,000 plan scans / 4,000 entries.
+  After the fix all four counters are zero. These are deterministic call/input
+  counts, not wall-clock latency claims.
+- `createAiResponseCollapse()` preserves unchanged response identities;
+  `createTurnActivityFolder()` reuses finished projections keyed by the user entry,
+  boundary length, entry identities and presentation state. Both caches belong to
+  the mounted conversation and use weak keys. Historical corrections invalidate
+  their own turn. Stable activity arrays, delivery objects and plans keep the row
+  memos cheap; the comparator has an entry-array identity fast path. The running
+  answer also retains the activity array when tools and notes have not changed.
+- The existing 300-event, 100 Hz batching test now also requires zero repeated
+  delivery/plan scans in the new shell. It still passes its 15 store updates,
+  independent composer typing and zero activity-bar redraw assertions. The
+  elapsed counter remains in its existing child component.
+- Added cache equivalence and invalidation coverage for middle-entry corrections,
+  late completion/delivery, backfill, truncation, inserted/deleted boundaries,
+  reordered turns, empty history, presentation toggles and running/finished state.
+  Classic rendering continues through the uncached fold.
+
+Validation:
+
+```sh
+# Before: 1 failed, 6 skipped; after: 1 passed, 6 skipped.
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx -t 'does not refold'
+# 2 files, 25 passed (31.92 s).
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts
+# 48 files, 959 passed, 1 skipped (37.03 s).
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/components/TerminalOutput.test.tsx src/__tests__/renderer/hooks/agent src/__tests__/renderer/utils/agentTaskList.test.ts src/__tests__/renderer/utils/logEntries.test.ts src/__tests__/renderer/utils/transcriptNativeConversion.test.ts src/__tests__/shared/gitChangeTurns.test.ts
+# 2 files, 20 passed (3.62 s), including synthetic provider delivery fixtures.
+npx vitest run --configLoader runner src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts
+# Each exits 0.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+# Both exit 0, no warnings or errors.
+npx eslint --no-ignore src/renderer/components/TerminalOutput/TerminalOutput.tsx src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/renderer/components/TerminalOutput/utils/collapseAiResponseLogs.ts src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts
+npx eslint -c eslint.dashes.config.mjs src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts
+# All nine changed files pass formatting; diff check exits 0.
+npx prettier --check src/renderer/components/TerminalOutput/TerminalOutput.tsx src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/renderer/components/TerminalOutput/utils/collapseAiResponseLogs.ts src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts docs/agent-guides/CANONICAL-UTILITIES.md docs/worklog.md CHANGELOG.md
+git diff --check
+```
+
+Remaining acceptance: rerun the same Electron `stream` stage, frozen-before and
+updated-after builds interleaved on the same Mac outside the sandbox. This change
+removes measured repeated derivation work; it does not establish a new p95 result
+or claim the 85.7 ms gate has passed. Native Electron scenarios were not rerun here.
+The flat projection still traverses references to detect arbitrary historical
+corrections; it does not make the entire streaming render constant-time.
+
+Electron 对比（本机 Apple M4，`e2e/perf-renderer.spec.ts` 的 stream 阶段，改动前为冻结构建 `79bd2ecac`，同轮交替）：修复前 6 轮，渲染脚本时间中位数改动后 973 毫秒、改动前 872 毫秒（多 101 毫秒）；修复后合并 12 轮，改动后 861.5、改动前 837.5（多 24 毫秒，约 3%）。按键等待 p95 在机器负载约 3 时单样本 29 到 170 毫秒，噪声大于差异；修复后同轮合并中位数改动后 96.6、改动前 129.7，不劣于改动前。与 2026-11-12 的 85.7 毫秒记录做绝对比较需要空闲机器复测，尚未完成。原生场景 `native-activity-bar`、`native-stop-resume`、`native-subtasks`、`native-new-shell-ssh`、`native-sidebar-titles`、`native-model-picker` 共 11 项通过。
+
+## 2026-11-18：B2 第五次回归跟进：晚到的回合交付
+
+验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。用户在沙箱外重跑八套原生场景得到 35 passed、2 failed；此前已有场景全部通过，剩余两项均为 B2 的文件交付条。
+
+- 实际 Claude/Codex CLI 夹具经 stdout handler 复现：首个输出早于 Git 基线返回，旧 guard 丢弃基线，因此没有产生交付事件，不是 renderer token 匹配失效。修复前两项均失败。
+- 初始化输出不再取消基线；缓存在途的 Write/add-only 调用，并用现有只读 Git helper 确认所有目标仍不存在后才接纳基线。已有文件、编辑、命令或已完成工具与采样重叠时继续舍弃不确定结果，保持按回合统计的含义。SSH 探测仍走远程通道，超时及非阻塞退出策略不变。
+- Codex 原先忽略 file_change 开始事件；现经同一 parser/工具通道只向新 shell 提供开始状态，以便识别采样中的写入。classic 仍只接收原有完成事件，新增双路径测试验证。
+- 两种 provider 的补测覆盖完成和排队结束后晚到的交付，只附到原回合；未知 token、下一回合及其他 tab 不受影响。实际 persistence hook 保存后重新加载日志，交付条仍显示 `Changed 2 files · +3 -0`。
+
+最终回归：89 files passed，2112 tests passed、1 skipped（44.61 秒）。新增真实 CLI 顺序复现 2/2 通过；晚到、队列隔离、持久化恢复用例两种 provider 均通过；Codex 开始事件补测先得到 1 failed、1 passed，修复后 classic/newShell 均通过。四套 TypeScript 均退出 0。ESLint 0 errors、2 warnings，均为 HEAD 已有的 StdoutHandler 测试局部变量未使用；测试 dash lint、变更文件 Prettier 和 diff 检查通过。原生 Electron 场景和截图不能在沙箱验证，仍需外部执行 `node scripts/native-e2e.mjs e2e/native-activity-bar.spec.ts`。没有提交。
+
+本次验证命令：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/hooks/agent src/__tests__/renderer/hooks/utils/useDebouncedPersistence.test.ts src/__tests__/renderer/utils/agentTaskList.test.ts src/__tests__/shared/gitChangeTurns.test.ts src/__tests__/main/git src/main/process-listeners/__tests__ src/__tests__/main/preload/process/core.test.ts src/__tests__/main/ipc/handlers/process.test.ts src/__tests__/main/process-manager src/__tests__/main/parsers/codex-output-parser.test.ts
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.activity-bar.json --noEmit
+npx eslint --no-ignore src/main/git-changes.ts src/main/process-listeners/forwarding-listeners.ts src/main/parsers/agent-output-parser.ts src/main/parsers/codex-output-parser.ts src/main/process-manager/handlers/StdoutHandler.ts src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx
+npx eslint -c eslint.dashes.config.mjs src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx
+npx prettier --check src/main/git-changes.ts src/main/process-listeners/forwarding-listeners.ts src/main/parsers/agent-output-parser.ts src/main/parsers/codex-output-parser.ts src/main/process-manager/handlers/StdoutHandler.ts src/__tests__/main/git/turn-delivery-fixture.test.ts src/__tests__/main/git/changes-transport.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx docs/agent-guides/CANONICAL-UTILITIES.md docs/worklog.md
+git diff --check
+```
+
+## 2026-11-18：B2 第四次回归跟进（PR #94）
+
+验证对象为 `229aee9a4` 加本 worktree 未提交修改，不是发行包。读取该 head 的 CI job
+`134476406942`，日志实际列出 7 failed、1 skipped、174 passed；用户提到的其余两项未在该次日志中出现。
+
+- SSH 和 worktree 排队场景的夹具先发回答，再等测试释放退出门。B2 把最新回答也折进活动条，测试看不到回答而不能放行。现在回答立即显示，工具和过程说明仍折叠。
+- Git 交付统计不再阻塞 spawn 或 process:exit。基线和结果各用现有 20 秒只读 Git 总时限；输出开始时尚未就绪的基线丢弃，下一轮开始时丢弃上一轮未完成的测量。SSH 全程走远程 helper。退出立即结算、排队继续，晚到结果通过 token 写回原回合；失败时不显示文件交付项。
+- 登录摘要按钮的可访问名称原来包含“重新登录”，与真正的登录卡按钮重复匹配。摘要现在用已有的展开/收起活动名称，说明保留，登录卡仍是唯一登录操作。
+- Stop 原生用例只按 PRD D1 把运行工具行改成活动条状态断言；重启、历史保留和继续对话断言不变。CLI Tasks 快照与面板复用同一标题和说明，严格逐字比较两行。
+- 项目工具配置的 CI 失败发生在 update-agent 后立即 show agent，读到旧路径和 token 模式，不是回合卡住。显式保存与先前 autosave 竞争；更新内存后复用持久化 flush，旧写入结束并落盘最新配置才回复 CLI。真实 persistence hook 测试覆盖此顺序。
+- 修正此前误把最终回答藏起来的两条单测；未读始终精确为 3，阅读锚点不动，输入与 100 Hz 批次独立。回答流触发活动条重绘次数从 1 收紧为 0。
+
+修复前新增的回答可见性和配置持久化用例：2 failed、18 passed。TerminalOutput 整目录 12 文件、471 passed、1 skipped；capture/agent hooks/CLI parity/persistence 等定向回归 49 文件、982 passed；登录可访问名称与摘要补测 2 文件、82 passed。lint、main、CLI、E2E 四套 TypeScript 检查通过；变更文件 Prettier、diff 和禁用字符检查通过。ESLint 0 errors、6 warnings，均为 HEAD 已有的测试局部变量未使用。完整组件、hooks 加定向主进程回归：1024 files passed、1 skipped，22776 tests passed、86 skipped（408.21 秒）；控制台出现的 mock/错误边界异常均为被测试处理的输出，没有失败。
+原生六套场景发现 33 项；沙箱 Electron 首次启动失败，32 项未运行。默认 Vite 配置加载另被外部链接依赖目录写入权限拦住，改用 runner 并提供配置所需的根目录后 renderer/web-desktop 构建通过；main/preload 和 CLI 构建也通过。没有原生截图或 Linux 重跑结果，仍需沙箱外重跑六套场景及 activity-bar 场景。没有提交。
+
+## 2026-11-17：B2 活动条、交付条和任务页如实显示（第二轮 B2-1 到 B2-7）
+
+新界面运行中的回合显示固定两行活动条（计数、当前过程说明、展开明细），结束后折叠成一行摘要；只有以错误结束的回合标红。回合末尾的交付条按回合边界和写入记录统计文件增删，可打开按该回合筛选的改动面板；没有计划来源时任务页说明原因，不显示 0/0。
+
+集成中修掉的问题：
+
+- 以错误结束、但没有独立活动条目的回合（启动失败，或原生工具 ID 与上一轮重复被合并）原来直接沿用上一轮的成功摘要。现在这种回合也生成摘要，原错误卡和恢复入口保留；展开只定位本回合的失败步骤，不借用旧回合的条目。
+- 摘要原因原来被通用错误文案或退出码替代。`turnFailureReason()`（`src/renderer/utils/logEntries.ts`）读取 provider 原文（Codex 在 `raw.errorLine`，Claude 在 `raw.stderr`），去 ANSI、压成一行、限 240 字符，原始 JSON 信封退回可读文案。自动重试用系统标记代替错误日志，退出处理改为同时读取属于本进程、本回合的 `tab.agentError`。登录错误保留本地化的登录说明。
+- 没有执行步骤的失败回合显示“失败：原因”，不再显示“已处理 · 0 步”。0 文件不显示文件统计，交付条没有内容时不出现。
+- 原有 6 个用例与新行为冲突：5 个按原有属性改写（未删断言、未放宽计数），1 个是真实的重绘问题，已修。
+
+原生场景 `e2e/native-activity-bar.spec.ts`：错误回合的夹具原因原为 `connection failed`，会被错误模式识别成网络错误并触发 Agent Resilience 自动重试，后续“写两个文件”的消息一直排在重试后面。该场景验证的是错误结束的显示，不是重试，所以改用不会被分类为可重试的原因 `Activity fixture tool crashed`；自动重试路径另有单测覆盖（上文第二条）。断言未改。
+
+验证（沙箱外，本机）：
+
+```sh
+node scripts/native-e2e.mjs e2e/native-activity-bar.spec.ts
+# 3 passed (1.7m): claude / codex 完整活动、错误、交付场景；codex 计划冷恢复
+npx vitest run src/__tests__/renderer/components/TerminalOutput src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx src/__tests__/renderer/utils/logEntries.test.ts e2e/fixtures/native/protocol.test.ts
+# 14 files, 542 passed, 1 skipped
+npm run lint   # exit 0
+```
+
+改动文件 ESLint、Prettier 通过，新增行没有禁止的长横线字符。
+
+## 2026-11-18：B3 左栏中间省略保留完整标题
+
+PR #93 的 Linux 原生 E2E 有三项失败（Claude 审批的 worktree 两项、子任务的已关闭父对话），本机复现。原因是 B3 的中间省略直接改写了标题文本，按完整标题查找的场景和读屏都只能拿到截断后的文字。现在可见标题仍做中间省略，截断时对辅助技术隐藏，旁边保留一份 `sr-only` 的完整标题；`data-conversation-title` 和 `title` 不变，264 像素下可见标题两两不同的断言不变。单测补充截断时完整标题可读的断言。
+
+```sh
+node scripts/native-e2e.mjs e2e/native-claude-permission.spec.ts e2e/native-subtasks.spec.ts e2e/native-sidebar-titles.spec.ts --grep "worktree|subtasks|sidebar"
+# 4 passed
+```
+
+## 2026-11-17：B1-2/3/4 新界面模型选择器
+
+验证对象为基于 `4e87704b29b5fde6592b4b71b5cd2b8de361763a` 的本 worktree
+未提交源码，不是发行包。新界面采用一个模型/强度按钮和锚定弹出层：厂商
+顺序与分组、模型说明、原生默认解析、模型自己的档位、按账号和对话记忆、
+缺目录回退及可选额度余量。Claude/Codex 的档位保持厂商名字，解释有中英文。
+`team-seat` 策略移除 Codex Ultra 并重新校验恢复值。旧界面选择器保留。
+
+复用现有可重绑快捷键、命令面板、layer stack、焦点和定位 hooks；CLI
+`open model-picker` 打开同一表面。筛选框上下选模型，右或 Tab 进入档位，
+左或 Shift+Tab 返回，Enter 确认。组件测试的完整切换路径为五次按键。
+Esc 只关闭这一层并恢复打开它的控件，运行中只改下一回合的覆盖值。
+明确的原生默认值与清除 Maestro 覆盖分开处理，exec 与 app-server 都不把
+内部标记发给厂商；队列和回合展示也不把标记显示为模型名字。
+
+定向 Vitest 15 文件、560 项通过，覆盖新组件及旧选择器、工具栏、默认覆盖、
+CLI、IPC、转录批处理、会话比较、表面入口与基准运行器。最后补充了额度/目录
+更新后的定位重测依赖，再单独运行新组件 17 项，通过。以下为执行命令：
+
+```sh
+npx vitest run src/__tests__/renderer/components/{ModelEffortPicker,ModelEffortModal,InputArea/components/{ModelEffortPills,ToolbarControls},ui/TurnSettingPills}.test.tsx src/__tests__/renderer/{hooks/agent/useAgentModelEffortOptions,hooks/session/useBatchedSessionUpdates,stores/sessionEquality,utils/openUiSurface}.test.ts src/__tests__/main/{agents/model-catalog,utils/agent-args,ipc/handlers/process}.test.ts src/__tests__/cli/commands/tab.test.ts src/__tests__/scripts/{perf-renderer,perf-renderer-runner}.test.ts --configLoader runner --no-cache
+npx vitest run src/__tests__/renderer/components/ModelEffortPicker.test.tsx --configLoader runner --no-cache
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.model-picker.json --noEmit
+npx tsc -p scripts/perf/tsconfig.json --noEmit
+npx eslint --no-ignore $(git ls-files -m -o --exclude-standard | rg '\.tsx?$')
+npx prettier --check $(git ls-files -m -o --exclude-standard | rg -v '^\.survey-A0\.md$')
+git diff --check
+npx playwright test e2e/native-model-picker.spec.ts --project=native --list
+npx playwright test e2e/perf-renderer.spec.ts --project=electron --list
+```
+
+TypeScript、ESLint、Prettier 与 diff 检查通过。Playwright 分别发现 1 项原生
+验收和 1 项 renderer 基准，没有启动 Electron。`.survey-A0.md` 原样保留。
+
+修改前的旧选择器与新选择器都未取得真实毫秒值：沙箱不能启动 Electron。
+新增显式 `picker` 基准阶段复用 `RendererRun.stage()`，在独立的 1000 消息
+对话测打开主键到可见且焦点就绪的第一帧；记录落盘后检查新选择器的 100 ms
+门槛。冻结两份完整构建并在同一台机器测量的命令见
+[性能说明](perf-renderer.md#阶段筛选)。没有用 jsdom 时间代替真实测量。
+
+未验证：Electron D7/D8/D9 的实际执行、原型视觉走查、100 ms 门槛、流式按键
+延迟回归、真实厂商推理及 Windows/Linux CI。团队对话框在别处开发，本次
+只交付并测试可复用的 team-seat 组件策略。沿用数据层已有的 SSH typed
+catalog 和项目局部原生默认解析限制。没有提交、发布或改变默认界面设置。
+
+## 2026-11-17：B1-1 按模型读取厂商目录
+
+本次只交付模型选择器的数据层：共享类型和纯选择规则、按有效账号读取的目录缓存、`agents:getModelCatalog`、preload 类型及 `models <provider>` CLI。Claude 读取 `cc` 目录的模型顺序、分组、描述和各自档位；Codex 按 priority 排序。文件及原生配置的修改时间改变时重新读取，不等 TTL。额度复用现有保留采样和过期规则，缺失不返回零，也不触发采样。前端接入、D9 键盘与焦点验收由 B1-2 至 B1-4 完成，见 [API 交接](round2/dev/model-catalog-api.md)。
+
+本机只读核对了两家真实目录形状，公开夹具全部合成。Claude 的客户端目录版本号未被当成 CLI 版本；默认模型标明来自配置、环境、目录状态或 Codex 目录顺序。原有 Codex 无静态模型 ID，目录缺失返回空模型表及内置档位回退标记，不新增猜测 ID。SSH 新接口明确返回 `unsupported-remote`，不读取本机目录或额度；旧远程发现接口不变。清理了移动 Claude 别名常量后留下的说明和 Codex 输出解析器的重复配置解析，未移除其他发现路径。
+
+验证对象为本 worktree 未提交源码和本次构建的 CLI bundle，不是发行包。定向 Vitest 10 文件、475 项通过；`tsconfig.main.json`、`tsconfig.lint.json`、`tsconfig.cli.json` 三套 `--noEmit` 通过。CLI bundle 构建与 `models --help` 通过。默认 Vitest 配置加载会写入外部链接的依赖目录，改用 `--configLoader native` 后通过；CLI 文档生成使用 worktree 内隔离数据目录，未更改已安装应用的数据。
+
+变更 TypeScript 文件的 ESLint 使用 `--no-ignore`，包含仓库默认忽略的测试文件，0 错误、0 警告；全部 30 个变更文件的 Prettier 检查通过，`git diff --check` 通过，新增内容无禁用破折号。原有 `.survey-A0.md` 保持未改动。
+
+未验：真实模型推理、打包应用 GUI、SSH typed catalog、Windows/Linux CI、项目局部原生默认配置和自定义 CLI 参数/二进制；没有提交、发布或切换默认 UI。
+
 ## 2026-11-18：M3 中型任务的挂起恢复、等待归属与停滞诊断，未提交
 
 以 `86b915d4b` 为基线核对 197 条真实账本事件：第一次 PM 立场已由接任模型恢复，随后讨论结论把“Dev and QA responses”登记为外部等待，阻断第二次讨论和原模型恢复后的派发。现统一拒绝、取消应用自有步骤的等待；挂起派发记录 resumedFrom 并保留任务上下文，原模型恢复也先检查工作区，旧额度采样不能撤销更新的恢复。十分钟没有事实进展时重算下一步，再发起一次 PM 诊断；纯重复的 PM 等待进入一次提醒、再诊断，真实外部轮询仍不算产品失败。话题引用中的未核实文字保留为依据，不当成证据。513 条团队测试、三项生产类型检查、场景类型检查、ESLint、格式、文档和 main/CLI 构建检查通过。新增回归及选择说明见 [M3 后端验证](round2/dev/team-m3-verification.md)。原生运行在构建沙箱边界和 Electron 启动处受阻，不能宣称场景通过；没有提交或付费模型调用。
@@ -68,6 +460,126 @@ Codex 0.166 起把计划调用记成代码模式的 `exec` 脚本（`text(await 
 - 合成 Electron 场景 `native-codex-plan-restart` 通过：实时显示计划，关掉会话重启，再从原生历史打开，清单不变。反证：只去掉存储侧的解码，同一场景失败。`native-codex-plan` 回归通过。
 - 真实模型 `real-tasks-panel` 通过（Claude Code 2.1.317，Codex 0.169.0-alpha.11.1；Claude Sonnet 5.5、Codex GPT-6.2-Sol；1.1 分钟）。第一次运行在启动前被预检拦下：钥匙串里的 Claude 访问令牌过期，用一次最小的 `claude -p` 让 CLI 自己刷新后重跑，没有碰登录流程。
 - 类型检查（lint、main、real-acceptance）、ESLint、Prettier 通过。
+
+## 2026-11-17：B2 完整组件回归跟进
+
+验证对象仍为同一未提交工作树源码。先运行用户指出的两个测试文件，复现全部六项失败：
+74 项通过、6 项失败、1 项跳过。没有删除断言或放宽计数、锚点、渲染次数的界限。
+
+- `counts exactly one unread for a tail entry that lands in the same commit as the prepend`：
+  (a)，D1 把过程说明收到活动详情，不能再断言它是独立的末行。仍精确断言未读为 1、
+  阅读行及行内偏移不变，展开后说明内容存在；新增另一条会增加尾部高度的用户消息分支，
+  保留对错误“按底部距离定位”实现的检出能力。
+- `counts a streamed answer once, however many chunks extend it`：
+  (a)，运行中的答案位于活动折叠内。仍精确断言未读从 2 到 3、所有后续分块维持 3、
+  阅读位置不变，并新增结束后展示完整答案、未读仍为 3 的断言。
+- `holds the reader when rows above grow with no scroll, and through a later refresh`：
+  (a)，同样更新过程说明的行归属。保留上方行增长 250px 后的精确锚点校正，
+  同时检查刷新折叠说明和追加真实尾行两种情况，未读均精确为 1。
+- `bounds activity redraws with newShell=true, interim=false` 和 `interim=true`：
+  两项都是 (a)，D4 要求最终有正常答复的回合不因中途失败标红。仍保持 1000 个历史
+  折叠在 15 次更新中零次重复耗时格式化、展开详情及时更新；新增真实错误终态更正后
+  摘要显示错误原因的断言。
+- `keeps ordinary typing independent of 100 Hz stream batches (newShell=true)`：
+  最初的折叠数量断言属于 (a)，应精确为 100 个历史折叠加 1 个运行条；继续检查发现
+  (b) 的实现回归：关闭的运行条在 15 次仅答案变化的批处理中全部重绘。先增加渲染
+  计数复现 15 对 1 的失败，再让 memo 只比较运行条实际展示的工具和公开说明。
+  第一次活动条替换占位宿主后，其余答案分块不再触发重绘，展开或结束仍读取最新条目。
+  原有 15 次 store 更新及 transcript 渲染、键入零额外渲染、300 块完整内容断言不变，
+  并检查展开详情确实包含全部 300 块。运行计时器使用新回合的当前时间，避免夹具把
+  1970 年的时间戳当成正在运行的回合；未放宽原有零次历史耗时格式化界限。
+
+最终完整目录命令均以退出码 0 结束，没有新增跳过：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput
+npx vitest run --configLoader runner src/__tests__/renderer/components
+npx vitest run --configLoader runner src/__tests__/renderer/hooks
+npx tsc -p tsconfig.lint.json --noEmit
+npx eslint --no-ignore src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.backfillAnchor.test.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx
+npx prettier --check src/renderer/components/TerminalOutput/components/TurnActivityFold.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.backfillAnchor.test.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.performance.test.tsx docs/worklog.md
+git diff --check
+```
+
+`TerminalOutput`：12 文件通过，459 项通过、1 项跳过，75.30s。
+`components`：724 文件通过、1 文件跳过，15530 项通过、83 项跳过，318.42s。
+`hooks`：284 文件通过，6750 项通过、3 项跳过，143.07s。
+三个目录均零失败；components 已包含 TerminalOutput，数量不能相加作为独立覆盖。
+TypeScript、ESLint（零警告）、Prettier 和空白检查通过；新增行无禁止的长横线字符。
+完整 components 输出包含既有 ErrorBoundary、WizardProvider、图标 mock 与 jsdom
+navigation 的错误日志，但 Vitest 没有报告失败或未处理异常。
+
+本次仅修复重绘和跟进测试，不改变活动条的外观。仍未运行原生 Electron、截图或
+真实浏览器输入延迟测量，下文的原生与性能验收边界继续适用。没有提交。
+
+## 2026-11-17：B2 回合活动与交付条
+
+验证对象为 `f1aa864ff` 上的未提交工作树源码，没有构建发行包、启动 Electron、
+调用真实模型或改写个人账户。修改只在本工作树，经典界面保留原有展示。
+
+新界面复用 `foldTurnActivity`、`TurnActivityFold` 和 `TurnRunningStatus`。
+运行中显示固定 64px 的两行内容，公开过程说明、工具计数、当前命令和真实计划
+都从本回合记录派生；详情沿用现有条目，结束后收成耗时与步数。Claude 的公开文本
+在后续工具调用确认其为过程说明时进入现有 commentary 通道，最后答复和推理分开。
+终态优先于中途工具失败，退出码留在中性明细。批准请求在可见回合中替换活动条，
+侧栏变为强调色实心点；背景请求保留既有模态入口。新 UI 和 CLI 帮助均有中英文。
+
+交付条不能直接采用已有 Changes 的当前 HEAD 差异。主进程现在在启动前捕获有界的
+脏文件补丁，在退出时按既有成功写入归因比较边界，只保存汇总数字和路径。
+历史无边界、HEAD 变化、二进制、过大内容和不明确的重命名显示行数不可用。
+并发外部写入同一归因文件无法通过工作区边界分离。点击交付条打开已有 Changes 并按
+回合筛选，该面板依旧展示当前文件差异。CLI 对等为
+`tab panel <id> changes-turns --turn <turn-id>`；没有 F3 结果时不显示验收占位。
+
+最终定向单元与组件回归 16 文件、706 项通过，包含经典界面、审批卡与侧栏、真实计划、
+失败终态、原生刷新保留交付数字、CLI 过滤和已有 git 行为：
+
+```sh
+npx vitest run --configLoader runner src/__tests__/renderer/components/TerminalOutput/foldTurnActivity.test.ts src/__tests__/renderer/components/TerminalOutput/TurnActivityBar.test.tsx src/__tests__/shared/gitChangeTurns.test.ts src/__tests__/shared/newShellPanel.test.ts src/__tests__/main/parsers/claude-output-parser.test.ts src/__tests__/main/process-manager/handlers/StdoutHandler.test.ts src/__tests__/main/git/changes.test.ts src/__tests__/renderer/components/ChangesPanel.test.tsx src/__tests__/renderer/components/TerminalOutput/TerminalOutput.feed.test.tsx src/__tests__/renderer/components/PermissionPrompt/PermissionPrompt.test.tsx src/__tests__/renderer/components/MainPanel/MainPanelHeader.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/hooks/agent/internal/useAgentExitListener.test.tsx src/__tests__/renderer/hooks/remote/useAppRemoteEventListenersSessionConfig.test.ts src/__tests__/renderer/utils/transcriptMessages.test.ts src/__tests__/cli/commands/tab.test.ts
+npx vitest run --configLoader runner --config e2e/fixtures/native/vitest.config.ts e2e/fixtures/native/protocol.test.ts -t 'emits three ordered|SIGINT records|executable stream'
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.activity-bar.json --noEmit
+npx playwright test e2e/native-activity-bar.spec.ts --project=native --list
+git ls-files -m -o --exclude-standard -z -- '*.ts' '*.tsx' '*.cjs' | xargs -0 npx eslint --no-ignore --rule 'no-undef:off'
+git ls-files -m -o --exclude-standard -z -- ':(exclude).survey-A0.md' | xargs -0 npx prettier --check
+npm run docs:verify
+git diff --check
+```
+
+协议定向测试 6 项通过，另 4 项未匹配筛选；四份 TypeScript 检查通过。
+ESLint 0 错误、4 条原有 unused 警告；`--no-ignore` 纳入测试，`no-undef:off`
+补偿现有 ESLint 对 `e2e/*.ts` 没有 Node globals 的配置，类型由 tsc 检查。
+改动文件 Prettier、文档路径检查及空白检查通过。默认 Vitest loader 因依赖目录
+只读而不能写临时配置，改用仓库已有的 runner loader。
+
+另尝试完整 fixture 命令
+`npx vitest run --configLoader runner --config e2e/fixtures/native/vitest.config.ts`。
+该次 92 项通过、6 项失败，其中新增的两项失败是断言误用不存在的 `isComplete`
+字段，改为 parser 的 `isResultMessage` 后通过上述定向复测；另外三项现有共享连接器
+用例因沙箱拒绝 Unix socket listen 而超时，一个现有 real-isolation relay 用例没有等到
+子进程记录。没有声称完整 fixture 套件通过，也没有放宽这些用例。
+
+新增 `e2e/native-activity-bar.spec.ts`，Playwright 收集 3 项。Claude/Codex 场景包含
+11 工具调用、3 段过程说明、35 秒附近的门控回合，检查高度不变、滚动增长最多一行、
+运行中 0 工具行、展开 11 条明细、唯一动画、中途失败后成功与终态失败，以及两文件
+`+3 -0` 交付过滤。Claude 使用 5 系模型且断言没有任务进度。第三项让 Codex 脚本计划
+在清除保存的展示日志后从原生历史恢复。
+
+原生场景和实际像素、截图、SSH、发行包均未验证。当前检出没有用户提到另一分支的
+Codex 脚本计划恢复前置修复，保留 `latestAgentTaskList`，不重复开发该修复。
+需要先整合该前置分支，再在沙箱外运行：
+
+```sh
+npm run build
+MAESTRO_E2E_REAL=0 npx playwright test e2e/native-activity-bar.spec.ts --project=native --workers=1 --retries=0
+```
+
+PRD 4.4 的 1000 消息选择器可交互 100ms 和流式按键等待标准未测。
+按 `docs/perf-renderer.md` 冻结 before/after 构建，在同一 Apple M4 上用已有
+`RendererRun.stage()` 运行器记录基线与复测，比较流式 p95 多轮中位数 85.7ms；
+选择器测量应与 B1 最终实现一起验收。禁止以 jsdom 的固定样式断言代替像素或性能结果。
 
 ## 2026-11-17：第二轮开工基线
 

@@ -275,6 +275,7 @@ export interface LogEntry {
 			input?: unknown;
 			/** Explicit write targets retained before display arguments are capped. */
 			writePaths?: string[];
+			exitCode?: number;
 			output?: unknown;
 		};
 		/**
@@ -339,6 +340,15 @@ export interface LogEntry {
 	// with other output, and is not taken as the turn's reply. The stored form of
 	// the same thing is `nativeTranscript.channel === 'commentary'`.
 	purpose?: 'commentary';
+	/** New shell turn boundary, stored on its user message. */
+	turnCompletion?: {
+		status: 'completed' | 'error' | 'canceled' | 'unknown';
+		timestamp: number;
+		reason?: string;
+		delivery?: import('../../shared/gitChangeTurns').TurnDelivery;
+		/** Correlates late delivery with this completed turn, never the active turn. */
+		deliveryToken?: string;
+	};
 	// How this turn was captured. 'structured' (default) is the normal JSON-stream
 	// pipeline from `claude --print`; 'text-stream' marks entries captured during
 	// maestro-p interactive-mode turns. The renderer uses the same tool-card /
@@ -893,6 +903,8 @@ export interface AITab {
 	enterToSend?: boolean; // Per-tab send-key override; undefined inherits `enterToSendAI` setting. Toggling the chip or palette action stores an override here so new tabs continue using the global default.
 	customModel?: string; // Per-tab model override; falls back to session.customModel, then agent default
 	customEffort?: string; // Per-tab effort/reasoning override; falls back to session.customEffort, then agent default
+	/** Per-conversation choices, partitioned by provider and account context. */
+	modelEfforts?: Record<string, import('../../shared/modelCatalog').RememberedModelEfforts>;
 	awaitingSessionId?: boolean; // True when this tab sent a message and is awaiting its session ID
 	thinkingStartTime?: number; // Timestamp when tab started thinking (for elapsed time display)
 	scrollTop?: number; // Saved scroll position for this tab's output view

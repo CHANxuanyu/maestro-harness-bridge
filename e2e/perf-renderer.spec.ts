@@ -1,3 +1,4 @@
+import pickerCatalog from '../src/__tests__/fixtures/model-catalog/claude.json';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -257,6 +258,14 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 								},
 							})
 						);
+						if (config.stages.has('picker')) {
+							const catalogDir = path.join(accounts['claude-code'], 'cache', 'model-catalog');
+							fs.mkdirSync(catalogDir, { recursive: true });
+							fs.writeFileSync(
+								path.join(catalogDir, 'synthetic.json'),
+								JSON.stringify(pickerCatalog)
+							);
+						}
 						const logs = transcriptMessagesToLogEntries(longMessages());
 						const tabs = ['a', 'b'].map((id) =>
 							createMockAITab({
@@ -269,6 +278,14 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 								})),
 							})
 						);
+						if (config.stages.has('picker'))
+							tabs.push(
+								createMockAITab({
+									id: 'picker',
+									name: 'Synthetic picker',
+									logs: transcriptMessagesToLogEntries(longMessages().slice(0, 1000)),
+								})
+							);
 						if (size === 'large')
 							fs.writeFileSync(
 								path.join(data, 'maestro-sessions.json'),
@@ -726,6 +743,78 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 									});
 								});
 							}
+							if (size === 'large')
+								await stage('picker', ['startup'], async (scope) => {
+									await scope.step('select 1000-message conversation', () =>
+										page.locator('[data-conversation-key$=":picker"] [data-tree-nav]').click()
+									);
+									await scope.step('picker transcript ready', () =>
+										expect(page.locator('[data-log-id]').last()).toContainText(
+											'Synthetic message 999'
+										)
+									);
+									await scope.step('picker oldest message attached', () =>
+										expect(page.locator('[data-log-id="message-0"]')).toBeAttached()
+									);
+									await scope.step('focus composer', () =>
+										page.getByPlaceholder(/^(Talking to |Message )/).focus()
+									);
+									await scope.step('arm picker probe', () =>
+										page.evaluate(() => {
+											const state = { ms: undefined as number | undefined, newPicker: 0 };
+											(window as unknown as { __pickerProbe: typeof state }).__pickerProbe = state;
+											const onKey = (event: KeyboardEvent) => {
+												if (
+													event.code !== 'Period' ||
+													!event.altKey ||
+													!(event.metaKey || event.ctrlKey)
+												)
+													return;
+												document.removeEventListener('keydown', onKey, true);
+												const start = event.timeStamp;
+												const ready = () => {
+													const dialog = document.querySelector<HTMLElement>(
+														'[data-testid="model-effort-popover"], [data-testid="model-effort-surface"]'
+													);
+													const filter = dialog?.querySelector('[role="combobox"]');
+													if (
+														dialog &&
+														Number(getComputedStyle(dialog).opacity) > 0 &&
+														dialog.contains(document.activeElement) &&
+														(!filter || filter === document.activeElement) &&
+														!dialog.textContent?.includes('Loading options...')
+													) {
+														state.ms = performance.now() - start;
+														state.newPicker = filter ? 1 : 0;
+													} else requestAnimationFrame(ready);
+												};
+												requestAnimationFrame(ready);
+											};
+											document.addEventListener('keydown', onKey, true);
+										})
+									);
+									await scope.step('open picker chord', () =>
+										page.keyboard.press(
+											process.platform === 'darwin' ? 'Alt+Meta+.' : 'Control+Alt+.'
+										)
+									);
+									await scope.step('picker focus and visible frame', () =>
+										page.waitForFunction(
+											() =>
+												(window as unknown as { __pickerProbe: { ms?: number } }).__pickerProbe
+													.ms !== undefined
+										)
+									);
+									const metric = await scope.step('picker timing', () =>
+										page.evaluate(
+											() =>
+												(window as unknown as { __pickerProbe: { ms: number; newPicker: number } })
+													.__pickerProbe
+										)
+									);
+									await scope.step('close picker', () => page.keyboard.press('Escape'));
+									return { 'large.picker.1000': metric };
+								});
 							if (startupTrace)
 								await stage('trace', ['startup'], async (scope) => {
 									await scope.step('startup trace file', () =>
@@ -767,4 +856,8 @@ test('renderer performance: startup stages, full backfill and isolated streaming
 		});
 	}
 	run.finish();
+	for (const sample of run.samples) {
+		const picker = sample.metrics['large.picker.1000'];
+		if (picker?.newPicker) expect(picker.ms).toBeLessThanOrEqual(100);
+	}
 });

@@ -1,18 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { NativeApp } from './fixtures/native-app';
-import { teamM2Brief } from './fixtures/native/team-m2.cjs';
+import { prepareNativeTeamM2 } from './fixtures/native-team-m2';
 import { reduceLedger } from '../src/shared/team/ledger';
-import {
-	DEFAULT_TEAM_AUTHORIZATIONS,
-	type CreateTeamInput,
-	type LedgerEvent,
-	type SeatRole,
-	type TeamConfig,
-	type Brief,
-} from '../src/shared/team/types';
+import { type LedgerEvent, type SeatRole, type TeamConfig } from '../src/shared/team/types';
 
 test.skip(
 	process.env.MAESTRO_E2E_REAL === '1',
@@ -31,79 +23,20 @@ for (const scenario of [
 	test(`team M2 ${scenario}: T5-T10, T13, T15`, async ({}, info) => {
 		test.setTimeout(300_000);
 		const native = new NativeApp(info, { providerCli: false });
-		const git = (...args: string[]) =>
-			execFileSync('git', args, { cwd: native.project, encoding: 'utf8' });
-		git('init');
-		git('config', 'user.name', 'Team M2 fixture');
-		git('config', 'user.email', 'team-m2@example.invalid');
-		git('config', 'commit.gpgsign', 'false');
-		git('config', 'core.hooksPath', path.join(native.root, 'no-hooks'));
-		fs.writeFileSync(path.join(native.project, 'result.html'), '<html><body>initial</body></html>');
-		fs.writeFileSync(path.join(native.project, 'other.html'), '<html><body>initial</body></html>');
-		fs.writeFileSync(
-			path.join(native.project, 'check.cjs'),
-			"const fs = require('node:fs'); console.log('# tests 1\\n# skipped 0'); process.exit(fs.readFileSync('result.html', 'utf8').includes('<h1>implemented</h1>') ? 0 : 1);\n"
-		);
-		git('add', '.');
-		git('commit', '-m', 'Synthetic M2 project');
-		const brief = structuredClone(teamM2Brief) as Omit<Brief, 'version'>;
-		const gate = path.join(native.root, 'release-m2-work');
-		const seats = Object.fromEntries(
-			(['pm', 'dev', 'qa'] as const).map((seat) => {
-				const account = path.join(native.root, `${seat}-m2-account`);
-				const script = path.join(native.root, `${seat}-m2-script.json`);
-				fs.mkdirSync(account);
-				fs.writeFileSync(
-					script,
-					JSON.stringify({
-						teamM2: {
-							seat,
-							scenario,
-							brief,
-							...(scenario === 'review' && seat === 'dev' ? { workGate: gate } : {}),
-						},
-					})
-				);
-				return [
-					seat,
-					{
-						tool: seat === 'dev' ? 'codex' : 'claude-code',
-						model: seat === 'dev' ? 'gpt-5.3-codex' : 'claude-sonnet-4-6',
-						effort: 'high',
-						customPath: path.resolve(`e2e/fixtures/native/${seat === 'dev' ? 'codex' : 'claude'}`),
-						customEnv: {
-							[seat === 'dev' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR']: account,
-							MAESTRO_NATIVE_SCRIPT: script,
-						},
-					},
-				];
-			})
-		) as unknown as CreateTeamInput['seats'];
+		const fixture = prepareNativeTeamM2(native, scenario);
+		const { brief, gate } = fixture;
 		let team: TeamConfig | undefined;
-		const events = (): LedgerEvent[] => {
-			if (!team) return [];
-			const file = path.join(native.data, 'teams', team.id, 'ledger.jsonl');
-			return fs.existsSync(file)
-				? fs
-						.readFileSync(file, 'utf8')
-						.split('\n')
-						.filter(Boolean)
-						.map((row) => JSON.parse(row))
-				: [];
-		};
+		const events = (): LedgerEvent[] => (team ? fixture.events(team.id) : []);
 		const state = () => reduceLedger(events());
 		let started = false;
 		let failed = false;
 		try {
 			await native.start();
 			started = true;
-			team = await native.page.evaluate((input) => window.maestro.team.create(input), {
-				idea: 'M2 synthetic acceptance',
-				projectRoot: native.project,
-				seats,
-				turnBudget: 200,
-				authorizations: { ...DEFAULT_TEAM_AUTHORIZATIONS, checks: scenario !== 'permission' },
-			});
+			team = await native.page.evaluate(
+				(input) => window.maestro.team.create(input),
+				fixture.input
+			);
 			if (scenario === 'permission') {
 				await expect
 					.poll(() => state().openCards.some((c) => c.id === 'permission:checks'))
@@ -173,14 +106,20 @@ for (const scenario of [
 					})
 					.toBe(true);
 				const card = state().openCards.find((c) => c.boundary === 'commitment')!;
-				expect(card.body).toContain('sealed position');
+				expect(card.payload).toMatchObject({
+					type: 'discussion',
+					positions: expect.arrayContaining([
+						expect.objectContaining({ claim: expect.stringContaining('sealed position') }),
+					]),
+				});
+				expect(card.body).not.toMatch(/^\s*[[{]/);
 				expect(card.referenceVotes).toContain('Reference only');
 				if (scenario === 'relaxation') {
 					expect(state().criteria[0]).toMatchObject({
 						text: brief.criteria[0].text,
 						status: 'fail',
 					});
-					expect(card.body).toContain('"failingNow":true');
+					expect(card.payload).toMatchObject({ type: 'discussion', failingNow: true });
 				}
 				await native.cli('team', 'stop', '--team', team.id);
 				return;

@@ -1,3 +1,4 @@
+import type { TurnDelivery } from '../../../shared/gitChangeTurns';
 import { ipcRenderer } from 'electron';
 import type { UsageStats } from '../../../shared/types';
 import type { ParsedQuestion } from '../../permission-relay/types';
@@ -260,20 +261,42 @@ export function createProcessCoreApi() {
 		 * `interrupted` identifies deliberate Stop, including an exit with code 0.
 		 */
 		onExit: (
-			callback: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void
+			callback: (
+				sessionId: string,
+				code: number,
+				signal?: number,
+				interrupted?: boolean,
+				delivery?: TurnDelivery,
+				deliveryToken?: string
+			) => void
 		): (() => void) => {
 			const handler = (
 				_: unknown,
 				sessionId: string,
 				code: number,
 				signal?: number,
-				interrupted?: boolean
+				interrupted?: boolean,
+				delivery?: TurnDelivery,
+				deliveryToken?: string
 			) => {
-				if (interrupted) callback(sessionId, code, signal, true);
+				if (deliveryToken)
+					callback(sessionId, code, signal, !!interrupted, delivery, deliveryToken);
+				else if (delivery) callback(sessionId, code, signal, !!interrupted, delivery);
+				else if (interrupted) callback(sessionId, code, signal, true);
 				else callback(sessionId, code, signal);
 			};
 			ipcRenderer.on('process:exit', handler);
 			return () => ipcRenderer.removeListener('process:exit', handler);
+		},
+
+		/** Optional per-turn Git decoration, delivered after the process has exited. */
+		onTurnDelivery: (
+			callback: (sessionId: string, token: string, delivery: TurnDelivery) => void
+		): (() => void) => {
+			const handler = (_: unknown, sessionId: string, token: string, delivery: TurnDelivery) =>
+				callback(sessionId, token, delivery);
+			ipcRenderer.on('process:turn-delivery', handler);
+			return () => ipcRenderer.removeListener('process:turn-delivery', handler);
 		},
 
 		/**

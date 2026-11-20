@@ -1,5 +1,440 @@
 # M3 backend verification, 2026-11-18
 
+## M3 fix5/fix5b merge integration, 2026-11-18
+
+Artifact: `85da119c7` plus the in-progress merge of `86b915d4b`. The CLI
+residual-assignment test was missing its closing `});`, nesting the incoming
+prompt tests and leaving the file unparsable. Closing that test preserves both
+sets of assertions. The M1 native spec now imports `LedgerEvent` for its compact
+transport audit.
+
+The baseline edit/return regression failed on the old whitespace-sensitive
+`"round": 1` match. The PM respond prompt still carries `baselineReturns`,
+`baselineEdits` and the complete current brief. The test now parses the ledger
+slice instead of matching indented JSON, and additionally checks the edited
+criterion text, proof source, proof method, current version and unchanged second
+criterion. Its scripted PM still publishes the footer revision with the owner
+message gate closed, then delivers and handles the later message in order.
+No runtime prompt or scheduler behavior was changed in this integration.
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/main/team/scheduler.test.ts -t 'revises the baseline after'
+# Before: 1 failed, 104 unselected, 567 ms.
+npx vitest run --configLoader runner --no-cache src/__tests__/cli/commands/team.test.ts src/__tests__/main/team/scheduler.test.ts -t 'residual|prompt|revises the baseline after'
+# After: 13 passed, 129 unselected, 911 ms.
+npx vitest run --configLoader runner --no-cache src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts
+# 530 passed, 20 files, 20.55 s.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+# All four exit 0 with no diagnostics.
+```
+
+ESLint/Prettier use the executable changed-file selection below, relative to
+HEAD and including incoming merge files. All three ESLint scopes pass;
+`npx prettier --check` passes all 27 changed/added files. `npm run docs:verify`
+checks 746 asserted paths with 0 missing. `git diff --check` passes, with no
+conflict markers or added forbidden dash characters. Files edited here are
+`src/__tests__/cli/commands/team.test.ts`,
+`src/__tests__/main/team/scheduler.test.ts`, `e2e/native-team.spec.ts`, this
+verification record and `docs/worklog.md`.
+
+No staging, commit, Electron run or screenshots were performed. Native execution
+of this merge remains unverified here:
+
+```sh
+node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-ui.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m2-ui.spec.ts e2e/native-team-m3.spec.ts e2e/native-team-m3-ui.spec.ts
+```
+
+## M3 fix2/fix3 merge integration, 2026-11-18
+
+Artifact: `838f3d31a` plus the in-progress merge of `f65c6933b` and this
+integration. The owner reported 40/40 native scenarios passing on `838f3d31a`;
+that is not a native run of this merge. No staging, commit or Electron execution
+was performed here. Fix4 QA location resolution and efficiency work are excluded.
+
+The initial full team run reproduced exactly five failures (496 passed).
+The hard dispatch budget and two-round challenge policy already held in the
+merged scheduler. The integration restores the typed card contract and corrects
+these stale test assumptions without relaxing scheduling or message assertions:
+
+- Baseline objections are structured `payload.challenges`, not serialized body
+  text. The cap/restart test now checks the exact objection and second-round
+  scope in that payload; it still checks the human boundary question and four
+  challenge dispatches across restart.
+- Both 20-turn tests now check `payload.generatedBy: app` and the human report
+  distinction instead of parsing `body` as JSON. Their exact dispatch/usage limit
+  and no-recovery assertions remain intact, with and without a recorded wrap-up.
+- The T7 PM acknowledgment fixture had restored the pre-edit `how` field while
+  acknowledging the new text. That is a real criterion change under fix2 and
+  correctly required another challenge. The fixture now acknowledges both owner
+  fields, and adds a final assertion that the new proof method survives. The
+  two-canary, immutable-history and confirmation assertions remain intact.
+- The edit/return test previously returned immediately after editing. Fix2 now
+  starts a fresh full challenge and supersedes the old confirmation card. The
+  test completes that new round before returning, matching the UI scenario's
+  existing wait for the next card. It still verifies the exact return note in
+  the PM prompt, the next published version, preserved owner text, footer
+  revision, minimal diff and delivered/handled message order with the gate closed.
+
+The baseline payload now types its challenge/response/decision history and stores
+the shared `teamChallengeRound()` scope at card creation. The renderer labels
+the full or changed-criteria round and folds the captured objections, QA plans,
+PM answers and decisions. A later cycle cannot replace that card's captured
+history. The discussion payload's boundary sentence renders once through the
+existing presentation adapter, with localized app wording. New English/Chinese
+tests cover the frozen round and scope; standard-change tests additionally check
+the single localized boundary explanation. No raw JSON is rendered.
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/main/team/scheduler.test.ts -t 'PM revisions cap|T7 owner baseline|revises the baseline after|real-run budget 20'
+# Before: 5 failed. After: 5 passed, 93 unselected, 1.28 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/Team/M2.test.tsx
+# 26 passed, 1 file, 6.85 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts
+# 503 passed, 19 files, 35.37 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/i18n/messages.test.tsx
+# 9 passed, 1 file, 1.38 s.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+# All four exit 0 with no diagnostics.
+```
+
+ESLint/Prettier use the executable changed-file selection below, relative to
+HEAD and including incoming merge files. All three ESLint scopes pass, and
+`npx prettier --check` passes all 31 changed/added files. `npm run docs:verify`
+checks 742 asserted paths with 0 missing. `git diff --check` passes; scans find
+0 conflict markers and 0 added forbidden dash characters.
+
+Files edited for this integration, beyond the incoming merge:
+
+- `src/shared/team/types.ts`: Type baseline history/scope and discussion boundary text with compatibility for older cards.
+- `src/main/team/scheduler.ts`: Freeze the shared challenge scope in the baseline payload.
+- `src/renderer/components/Team/TeamBaseline.tsx`: Render the round summary and captured challenge/response fold.
+- `src/renderer/components/Team/OwnerCard.tsx`: Mount baseline history and the single boundary explanation.
+- `src/renderer/services/teamClient.ts`: Localize the structured commitment boundary without duplicate prose.
+- `src/renderer/i18n/locales/en/team.ts`: Add English challenge scope and objection outcomes.
+- `src/renderer/i18n/locales/zh-CN/team.ts`: Add matching Chinese strings.
+- `src/__tests__/main/team/scheduler.test.ts`: Align old flow fixtures with full owner-edit challenges and human card payloads, preserving behavior assertions.
+- `src/__tests__/renderer/components/Team/M2.test.tsx`: Verify frozen challenge scope/history and localized boundary rendering.
+- `CHANGELOG.md`: Record card presentation and remove the obsolete duplicate quota-budget exemption.
+- `docs/worklog.md`: Record this merge integration and its validation.
+- `docs/round2/dev/team-m3-verification.md`: Record the reproduced failures, precise adjustments and checks.
+
+Native execution and visual layout remain unverified for this merge. External command:
+
+```sh
+MAESTRO_E2E_SHOTS=/tmp/maestro-m3-integration-shots node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-ui.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m2-ui.spec.ts e2e/native-team-m3.spec.ts e2e/native-team-m3-ui.spec.ts
+```
+
+## M3 UI external review follow-up, 2026-11-18
+
+The owner ran all six native team specs externally: 38 passed, 2 failed. This
+round inspected the supplied failure screenshots, trace and retained M1 fixture
+ledger, plus the quota/takeover and Chinese unfinished-report screenshots. No
+Electron or screenshot run was performed here. The same merge remains resolved
+in file contents and unstaged; no commit was made.
+
+The failed M1 ledger ended after QA opened the defect. Dev had already repaired
+its malformed challenge report and completed implementation successfully. The
+new failure cooldown selected the successful repair because its accepted report
+belongs to the original dispatch, leaving the repair's `turn.report` empty.
+Its `turn_finished.report` was valid. The cooldown now excludes that successful
+receipt (and canceled turns), while retaining the guard for actual failures.
+The scheduler regression follows repaired PM/dev reports, an owner note during
+the baseline checkpoint, confirmation, work, QA issue, dev fix and QA reverify,
+without advancing past the cooldown. It failed at the absent fix dispatch before
+the correction. The M1 scenario's polling and issue-order assertions are unchanged;
+it now also saves `ledger.json` on failure. The inspected ledger is retained only
+in the ignored failure-artifact directory, with no private paths in this record.
+
+Login cards now name the vendor display name and the host-resolved account
+directory in their human body. `payload.provider` retains the provider ID and
+`payload.accountDir` carries the directory, never credential contents. The native
+login assertion now checks the existing structured `provider: claude-code`,
+`accountSeat`, resolved directory and human `Claude Code` text instead of requiring
+the provider ID in prose. Scheduler coverage verifies the same account resolver.
+
+Recovery receipts and waits use the single client presentation adapter. Takeover
+and restart explanation cards are not repeated by the recovery receipt. Quota
+waits name the provider, known reset and next check in the UI language. Known
+application instructions are mapped to human text; member-authored rationale and
+editable criterion proof methods remain content. Members labels developer/QA
+worktrees instead of showing lone directory names. Sidebar coverage is one line,
+with its actual catalog model and effort in the tooltip. Budget exhaustion takes
+precedence over a paused flag in the header and status strip and removes the
+pause/resume control; the unfinished report remains the decision point. Ordinary
+owner pauses still offer Resume and queue composer input. Twelve new jsdom cases
+cover these changes in English and Chinese.
+
+Checks:
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/main/team/scheduler.test.ts -t 'M1 repaired reports|M3 still-working is not'
+# Before: 2 failed. After: 2 passed, 84 unselected, 706 ms.
+npx vitest run --configLoader runner --no-cache src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts
+# 466 passed, 19 files, 25.30 s.
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/i18n/messages.test.tsx
+# 70 passed, 3 files, 14.71 s.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+# All four exit 0, including the six scenario files and their imported fixtures.
+```
+
+ESLint passes all changed source, test and scenario files using the same
+changed-file selection command recorded below. `npx prettier --check` passes all
+63 changed/added files. `npm run docs:verify` checks 740 asserted paths with 0
+missing. `git diff --check` passes. The complete working diff includes the
+uncommitted merge and both UI rounds, so formatting covers that whole file set.
+
+Files changed in this follow-up:
+
+- `src/main/team/scheduler.ts`: Ignore successful repair receipts in the failure cooldown; name the resolved login account.
+- `src/shared/team/types.ts`: Type the login payload's resolved account directory.
+- `src/__tests__/main/team/scheduler.test.ts`: Extend the M1 repair regression through the issue chain and verify login identity.
+- `e2e/native-team-ui.spec.ts`: Save the full ledger when the M1 UI scenario fails.
+- `e2e/native-team-m3.spec.ts`: Assert structured provider identity and readable vendor/account text.
+- `src/renderer/services/teamClient.ts`: Share localized recovery and wait presentation; map application prose safely.
+- `src/renderer/components/Team/TeamHealth.tsx`: Show resolved login details and compact coverage identity.
+- `src/renderer/components/Team/TeamPrimitives.tsx`: Keep catalog model/effort in compact tag tooltips.
+- `src/renderer/components/Team/TeamSidebar.tsx`: Use compact, nonwrapping coverage labels.
+- `src/renderer/components/Team/TeamProgress.tsx`: Present provider/reset waits with the shared adapter.
+- `src/renderer/components/Team/TeamPanel.tsx`: Label developer and QA workspaces.
+- `src/renderer/components/Team/TeamView.tsx`: Distinguish exhausted budget from owner pause and localize the next wait.
+- `src/renderer/components/Team/TeamFeed.tsx`: Localize recovery receipts and keep one takeover explanation.
+- `src/renderer/components/Team/TeamEscalation.tsx`: Show the resolved login account and readable escalation context.
+- `src/renderer/components/Team/OwnerCard.tsx`: Route displayed rationale through the human-text adapter.
+- `src/renderer/components/Team/TeamDiscussion.tsx`: Apply the adapter to displayed response and wait text.
+- `src/renderer/components/Team/TeamDecisions.tsx`: Apply the adapter to displayed standard-change reasons.
+- `src/renderer/i18n/locales/en/team.ts`: Add human English recovery, wait, budget and workspace wording.
+- `src/renderer/i18n/locales/zh-CN/team.ts`: Add the corresponding Chinese wording.
+- `src/__tests__/renderer/components/Team/M3.test.tsx`: Add both-language state, receipt, wait, workspace and compact-row coverage.
+- `CLAUDE.md`: Index the shared recovery/wait presenters.
+- `docs/agent-guides/CANONICAL-UTILITIES.md`: Document the presentation boundary and reuse rules.
+- `CHANGELOG.md`: Record the user-facing corrections.
+- `docs/worklog.md`: Record this follow-up and its verification.
+- `docs/round2/dev/team-m3-verification.md`: Preserve the external evidence, diagnosis and exact checks.
+
+Still unverified here: Electron layout, live account login and the corrected
+native scenarios. The external rerun command remains:
+
+```sh
+MAESTRO_E2E_SHOTS=/tmp/maestro-m3-ui-fix1-shots node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-ui.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m2-ui.spec.ts e2e/native-team-m3.spec.ts e2e/native-team-m3-ui.spec.ts
+```
+
+## M3 UI integration, 2026-11-18
+
+Artifact: `744410cc8` plus the in-progress merge of `d0e1698c5` and the M3 UI
+working-tree changes. All conflict markers are resolved. The index deliberately
+remains unmerged: no staging or commit was performed. Earlier backend records
+below describe their own artifacts, not an Electron run for this UI change.
+The separate backend follow-up for dispatch hard stops, position references and
+challenge limits was not reimplemented.
+
+The pre-renderer merge gate passed 427 tests in 18 files (34.60 s) and all four
+TypeScript projects. The merged runtime retains quota sampling, model-aware
+launch options and account resolution for takeover transcripts. M2 human
+checkpoint bodies, structured payloads, baseline returns and message handling
+remain covered by the suite. A focused account/transcript regression run passed
+3 tests with 81 unselected. Restart inspection now has a distinct durable receipt
+from an earlier retry inspection, so that prior receipt cannot hide recovery
+from the UI. Both real-workspace restart cases failed before this correction
+and pass afterward (2 passed, 84 unselected, 1.23 s).
+
+### Surfaces and prototype mapping
+
+- Seat rows and Members use the same health projection: active work, bounded
+  retry, missing/bad report, broken conversation, unavailable model, expired
+  login, idle turn and normal wait. Held faults have a dot and details instead
+  of a busy spinner. Coverage uses the actual binding's catalog model and
+  account source. Members explains automatic switchback and retains fault
+  history. Login opens the existing account-scoped reauthentication dialog;
+  confirming recovery is a separate owner action.
+- The prototype's temporary-PM explanation and normal wait become ledger-derived
+  feed entries. An unavailable PM also exposes the app-generated status card,
+  including evidence coverage, missing reasons, open work, waits and budget.
+  Waits show the recorded next check, with the initial 20-minute and subsequent
+  10-minute cadence; internal application job identifiers stay out of the UI.
+- The prototype's authorization and unavailable-PM decision cards use generic
+  owner cards with one boundary label, attempted paths, costs, recommendation
+  and budget. Permission detail names the action class, exact action, task
+  branch, no-main boundary and decline effect. Grants appear in Members and
+  rules. Declining a requested publication records a failed receipt and skips
+  that action without stopping independent work.
+- The header retains the compact layout, always shows budget usage and, when
+  set, time remaining to deadline. Paused state is explicit and the composer
+  continues to queue. The 80-percent wrap-up plan is informational.
+- The deadline/budget simulation renders a distinct progress report, beginning
+  with the report-versus-demo disclaimer. It shows the captured output, missing
+  evidence and reasons, recorded attempts, changes and recommendation. Owner
+  choices extend the proposed time/turns, accept the listed gaps or stop while
+  retaining branch and ledger. Report snapshots retain their recorded attempts
+  and output rather than silently substituting later work.
+- The terminal collaboration summary covers accepted, accepted with gaps and
+  stopped using actual reducer statistics. Gap items remain unmet and have
+  editable follow-up owners. Assignment appends an event through the shared
+  IPC and CLI path; it does not mark evidence passing.
+- Progress renders the prototype's problem attempt ledger with numbered
+  attempts, basis, difference, expected evidence, progress/no-progress/repeat
+  or diagnosis verdicts. The restart simulation renders one inspection note
+  per dispatch, while preserving the backend's reconciliation and work effects.
+- Members adds per-seat and total turns, input/output tokens, recorded cost and
+  member time, plus team wall time and cost coverage. Values use the same
+  reduced usage as `team show cost`. Existing output, discussion, baseline,
+  review, demo, message handling and terminal composer behavior remain intact.
+
+### Checks for the integrated source
+
+```sh
+npx vitest run --configLoader runner --no-cache src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts
+# 454 passed, 19 files, 17.82 s. Includes 23 new M3 renderer cases.
+npx vitest run --configLoader runner --no-cache src/__tests__/renderer/components/SessionList/ProjectSessionSidebar.test.tsx src/__tests__/renderer/components/ProjectSessionTree.test.tsx src/__tests__/renderer/i18n/messages.test.tsx
+# 70 passed, 3 files, 6.65 s.
+npm run test:e2e:fixtures -- --configLoader runner e2e/fixtures/native/team-m3.test.ts
+# 1 passed, 1 file, 594 ms. Does not launch Electron.
+npx tsc -p tsconfig.lint.json --noEmit
+npx tsc -p tsconfig.main.json --noEmit
+npx tsc -p tsconfig.cli.json --noEmit
+npx tsc -p e2e/tsconfig.team.json --noEmit
+# All four exit 0; no diagnostics.
+npx playwright test e2e/native-team-m3-ui.spec.ts --project=native --list
+# 7 tests discovered; discovery only.
+MAESTRO_USER_DATA=/tmp/maestro-m3-ui-reference npm run gen:cli-reference
+# Exit 0; includes the CLI build and generated residual assignment reference.
+```
+
+ESLint and Prettier use the complete changed-file set relative to HEAD, including
+incoming merge files and new files. The executable command is recorded here so
+it does not depend on a private temporary helper:
+
+```sh
+python3 - <<'CHECKS'
+import pathlib
+import subprocess
+files = sorted(set(
+    subprocess.check_output(['git', 'diff', '--name-only', 'HEAD'], text=True).splitlines()
+    + subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'], text=True).splitlines()
+))
+files = [p for p in files if pathlib.Path(p).is_file() and not p.endswith('.png')]
+source = [p for p in files if p.startswith('src/') and not p.startswith('src/__tests__/') and p.endswith(('.ts', '.tsx'))]
+tests = [p for p in files if p.startswith('src/__tests__/') and p.endswith(('.ts', '.tsx'))]
+scenarios = [p for p in files if p.startswith('e2e/') and p.endswith(('.ts', '.cjs'))]
+for command in [
+    ['npx', 'eslint', *source],
+    ['npx', 'eslint', '-c', 'eslint.dashes.config.mjs', *tests],
+    ['npx', 'eslint', *scenarios],
+    ['npx', 'prettier', '--check', *files],
+]:
+    subprocess.run(command, check=True)
+CHECKS
+npm run docs:verify
+git diff --check
+```
+
+All three ESLint scopes and Prettier pass (59 changed/added files checked for
+formatting). `docs:verify` checks 740 asserted paths with 0 missing.
+`git diff --check` passes; conflict-marker and added-text scans find no markers
+and no forbidden dash characters. No screenshots were added.
+
+### Native verification still required
+
+No Electron run, new screenshot, real login, live quota reset, real paid model
+or publication was performed for this UI round. Layout, focus and real
+reauthentication still need native verification. Run on an Electron-capable host:
+
+```sh
+MAESTRO_E2E_SHOTS=/tmp/maestro-m3-ui-shots node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-ui.spec.ts e2e/native-team-m2.spec.ts e2e/native-team-m2-ui.spec.ts e2e/native-team-m3.spec.ts e2e/native-team-m3-ui.spec.ts
+```
+
+The seven new scenarios cover permission, quota escalation/takeover, login
+expiry, missing report, limits in English and Chinese, and no-progress attempts.
+Owner actions use UI controls and assert ledger state: permission, takeover,
+baseline confirmation, pause/resume, extension, acceptance with gaps and residual
+assignment. Screenshots are optional via `MAESTRO_E2E_SHOTS` and include the three
+fault families, app status, permission/escalation, unfinished report, gaps
+summary, attempts and cost table. Clock advances and prior attempt history use
+the existing stopped-fixture technique, not a claim of live 20-minute waits or
+three real provider failures. Login screenshots do not attempt real credentials.
+
+### Changed-file manifest
+
+This lists the whole diff against HEAD; entries marked incoming are preserved
+M3 backend work, not a second implementation of it.
+
+- `CHANGELOG.md`: Retain both merge entries and add the user-facing M3 UI change.
+- `docs/agent-guides/CANONICAL-UTILITIES.md`: Retain incoming team recovery, quota and progress utility guidance.
+- `docs/agent-guides/CLI-UI-PARITY.md`: Merge both audits; document M3 owner actions, login and residual assignment parity.
+- `docs/cli-reference.md`: Regenerate CLI help including residual owner assignment.
+- `docs/round2/dev/team-m3-verification.md`: Preserve backend evidence and record this merge, UI surfaces, checks and limitations.
+- `docs/round2/dev/team-model.md`: Merge M2/M3 model documentation and describe the renderer contract.
+- `docs/worklog.md`: Record this round and its source-only verification.
+- `e2e/fixtures/native-team-m3.ts`: Share M3 isolated setup, stopped-app mutation and attempt history between specs.
+- `e2e/fixtures/native/cli.cjs`: Dispatch M1, M2 and M3 through the same native team scene helper.
+- `e2e/fixtures/native/team-m3.cjs`: Retain M3 scripted seats; add optional repair/takeover screenshot gates.
+- `e2e/fixtures/native/team-m3.test.ts`: Retain the incoming real child-process restart gate test.
+- `e2e/native-team-m3-ui.spec.ts`: Add seven owner-driven UI scenarios with ledger assertions and optional screenshots.
+- `e2e/native-team-m3.spec.ts`: Reuse the shared M3 fixture without changing backend scenario assertions.
+- `e2e/tsconfig.team.json`: Include every M1/M2/M3 backend and UI scenario.
+- `src/__tests__/cli/commands/team.test.ts`: Retain M3 command coverage and test residual assignment arguments.
+- `src/__tests__/cli/services/session-command.test.ts`: Retain incoming CLI error-envelope and stderr coverage.
+- `src/__tests__/main/team/ipc.test.ts`: Retain M3 handlers and add the residual assignment channel.
+- `src/__tests__/main/team/quota.test.ts`: Retain incoming provider quota/reset tests.
+- `src/__tests__/main/team/scheduler.test.ts`: Merge all regressions; test takeover accounts, structured payloads, declined publication and residual ownership.
+- `src/__tests__/main/team/turn-dispatcher.test.ts`: Retain incoming M3 dispatch failure and usage tests.
+- `src/__tests__/main/team/workspaces.test.ts`: Retain incoming inspection and publication tests.
+- `src/__tests__/renderer/components/Team/M3.test.tsx`: Cover M3 health, cards, permissions, attempts, terminal states, ownership, login, restart and costs.
+- `src/__tests__/shared/progressRules.test.ts`: Retain incoming repeat/progress diagnosis coverage.
+- `src/__tests__/shared/team/ledger.test.ts`: Retain incoming quota, usage, residual and terminal reduction tests.
+- `src/__tests__/shared/team/policy.test.ts`: Retain incoming takeover and authorization policy coverage.
+- `src/cli/commands/team.ts`: Retain M3 commands; add team residual assign and its help.
+- `src/cli/services/session-command.ts`: Retain incoming machine-readable CLI failure behavior.
+- `src/main/ipc/handlers/team.ts`: Merge imports and M3 handlers; add residual assignment.
+- `src/main/preload/team.ts`: Merge M2/M3 wire types; expose residual assignment.
+- `src/main/team/quota.ts`: Retain incoming account-scoped quota sampling.
+- `src/main/team/report-events.ts`: Retain incoming wrap-up, waiting and recovery event mapping.
+- `src/main/team/runtime.ts`: Combine quota, model-aware launch options and actual-source transcript account lookup.
+- `src/main/team/scheduler.ts`: Preserve both schedulers; structure M3 card payloads, distinguish restart inspection and support residual assignment/decline.
+- `src/main/team/turn-dispatcher.ts`: Retain incoming fault classification, recovery and usage handling.
+- `src/main/team/workspaces.ts`: Retain incoming workspace inspection and authorized publication.
+- `src/renderer/components/Team/OwnerCard.tsx`: Render structured escalation/report detail while preserving single boundary labels and option behavior.
+- `src/renderer/components/Team/TeamEscalation.tsx`: Add permission, attempted-path and unfinished-report presentations.
+- `src/renderer/components/Team/TeamFeed.tsx`: Render M3 fault, takeover, wait, wrap-up, app status and restart entries.
+- `src/renderer/components/Team/TeamHealth.tsx`: Share seat health, coverage identity, provider details and account login controls.
+- `src/renderer/components/Team/TeamPanel.tsx`: Add progress attempts/waits/residuals and member health/grants/costs.
+- `src/renderer/components/Team/TeamPrimitives.tsx`: Allow seat tags to use takeover source catalogs and omit repeated role labels.
+- `src/renderer/components/Team/TeamProgress.tsx`: Add waits, app status, attempt history, cost bill, residual owners and wrap-up.
+- `src/renderer/components/Team/TeamSidebar.tsx`: Display actual seat health and coverage in left-bar member rows.
+- `src/renderer/components/Team/TeamSummary.tsx`: Keep actual terminal statistics and add costs plus assignable unmet follow-ups.
+- `src/renderer/components/Team/TeamView.tsx`: Show paused state and remaining deadline alongside budget usage.
+- `src/renderer/components/Team/deriveTeamFeed.ts`: Group M3 wrap-up/inspection events and avoid duplicate wrap-up reports.
+- `src/renderer/global.d.ts`: Retain merged team bridge contract and type residual assignment.
+- `src/renderer/i18n/locales/en/team.ts`: Add English M3 state, action, report and cost strings.
+- `src/renderer/i18n/locales/zh-CN/team.ts`: Add matching Chinese M3 strings and prototype terminology.
+- `src/renderer/services/teamClient.ts`: Keep one adapter for human card prose, structured payloads and relative display text.
+- `src/renderer/stores/teamStore.ts`: Add residual assignment through the existing pending/error action path.
+- `src/shared/progressRules.ts`: Retain incoming attempt classification and shared diagnostic behavior.
+- `src/shared/retryClassification.ts`: Retain incoming quota, login and session fault classification.
+- `src/shared/team/ledger.ts`: Preserve M2/M3 reduction; replace a residual item when its owner changes.
+- `src/shared/team/policy.ts`: Retain incoming quota-aware binding, takeover and action policies.
+- `src/shared/team/prompts.ts`: Retain incoming wrap-up, waiting and recovery prompt contracts.
+- `src/shared/team/schemas.ts`: Retain incoming M3 report schemas.
+- `src/shared/team/status.ts`: Retain incoming M3 status and cost projections.
+- `src/shared/team/types.ts`: Retain M2/M3 contracts; type escalation/report/permission payloads and inspection reason.
+
+Artifact: `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus the uncommitted M3
+worktree changes. Verification targets source and development builds, not an
+
+Latest artifact: `ee282fec1` plus the uncommitted third real-model follow-up changes.
+
+Latest artifact: `f65c6933b` plus the uncommitted fourth real-model follow-up changes.
+
+Latest artifact: `2f3f78cfb` plus the uncommitted fifth follow-up and its native CLI/audit corrections.
+
 Latest artifact: `86b915d4b` plus the uncommitted sixth follow-up.
 Earlier M3 records below used `d50dba3f49c8b5c7a975a8a545dd442f603341ff` plus
 the then-uncommitted M3 work. Verification targets source and development builds, not an

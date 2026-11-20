@@ -10,6 +10,9 @@ import { wrapSpawnWithSsh, sshUnresolvedRemoteMessage } from './utils/ssh-spawn-
 import type { SshRemoteSettingsStore } from './utils/ssh-remote-resolver';
 import { shellEscapeRemotePath } from './utils/shell-escape';
 
+/** cmd.exe's command-not-found line, matched the same way as `sshRemoteShell.ts`. */
+const CMD_COMMAND_NOT_FOUND = /is not recognized as an internal or external command/i;
+
 export interface CheckRequest {
 	command: string;
 	cwd: string;
@@ -119,7 +122,14 @@ export function createCheckRunner(deps: CheckRunnerDependencies = {}) {
 				if (stopped) return result(stopped, typeof code === 'number' ? code : null);
 				// POSIX shell launch failures and cmd's command-not-found code are
 				// infrastructure outcomes, distinct from a check returning nonzero.
-				if (typeof code !== 'number' || [126, 127, 9009].includes(code)) {
+				// `cmd /c` reports a missing command as exit 1, keeping 9009 for
+				// batch files, so its message is the only signal there.
+				const cmdMissing =
+					host.kind === 'local' &&
+					isWindows() &&
+					code === 1 &&
+					CMD_COMMAND_NOT_FOUND.test(`${tail}\n${completed.stderr ?? ''}`);
+				if (typeof code !== 'number' || cmdMissing || [126, 127, 9009].includes(code)) {
 					return result(
 						'not-run',
 						typeof code === 'number' ? code : null,

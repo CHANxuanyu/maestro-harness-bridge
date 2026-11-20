@@ -1,114 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { test, expect, type TestInfo } from '@playwright/test';
-import { NativeApp } from './fixtures/native-app';
-import { teamM2Brief } from './fixtures/native/team-m2.cjs';
+import { test, expect } from '@playwright/test';
+import { prepareNativeTeamM3 as fixture, seedM3Attempts } from './fixtures/native-team-m3';
 import { reduceLedger } from '../src/shared/team/ledger';
 import { decideNext, judgeAttempts, type AttemptInput } from '../src/shared/progressRules';
-import {
-	DEFAULT_TEAM_AUTHORIZATIONS,
-	type CreateTeamInput,
-	type LedgerEvent,
-	type TeamConfig,
-} from '../src/shared/team/types';
-import type { FollowUp } from '../src/shared/followUp';
 
 test.skip(process.env.MAESTRO_E2E_REAL === '1', 'M3 uses synthetic seats only, never paid models');
-
-async function fixture(info: TestInfo, scenario: string, turns = 200) {
-	const native = new NativeApp(info, { providerCli: false });
-	const git = (...args: string[]) =>
-		execFileSync('git', args, { cwd: native.project, encoding: 'utf8' });
-	git('init');
-	git('config', 'user.name', 'M3 synthetic fixture');
-	git('config', 'user.email', 'm3@example.invalid');
-	git('config', 'commit.gpgsign', 'false');
-	git('config', 'core.hooksPath', path.join(native.root, 'no-hooks'));
-	fs.writeFileSync(path.join(native.project, 'result.html'), '<html><body>Initial</body></html>');
-	fs.writeFileSync(path.join(native.project, 'other.html'), '<html><body>Initial</body></html>');
-	fs.writeFileSync(
-		path.join(native.project, 'check.cjs'),
-		"console.log('# tests 1\\n# skipped 0'); process.exit(require('node:fs').readFileSync('result.html','utf8').includes('<h1>implemented</h1>') ? 0 : 1);\n"
-	);
-	git('add', '.');
-	git('commit', '-m', 'Synthetic M3 project');
-	const gate = path.join(native.root, 'release-m3');
-	const seats = Object.fromEntries(
-		['pm', 'dev', 'qa'].map((seat) => {
-			const tool = seat === 'dev' ? 'codex' : 'claude-code';
-			const account = path.join(native.root, `${seat}-account`);
-			const script = path.join(native.root, `${seat}-script.json`);
-			fs.mkdirSync(account);
-			fs.writeFileSync(
-				script,
-				JSON.stringify({ teamM3: { seat, scenario, gate, brief: teamM2Brief } })
-			);
-			return [
-				seat,
-				{
-					tool,
-					model: tool === 'codex' ? 'gpt-5.3-codex' : 'claude-sonnet-4-6',
-					customPath: path.resolve(`e2e/fixtures/native/${tool === 'codex' ? 'codex' : 'claude'}`),
-					customEnv: {
-						[tool === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR']: account,
-						MAESTRO_NATIVE_SCRIPT: script,
-					},
-				},
-			];
-		})
-	) as unknown as CreateTeamInput['seats'];
-	if (scenario === 'quota-substitute')
-		seats.pm.substitute = { tool: seats.dev.tool, model: seats.dev.model };
-	await native.start();
-	const team: TeamConfig = await native.page.evaluate(
-		(input) => window.maestro.team.create(input),
-		{
-			idea: `M3 ${scenario}`,
-			projectRoot: native.project,
-			seats,
-			turnBudget: turns,
-			authorizations: {
-				...DEFAULT_TEAM_AUTHORIZATIONS,
-				temporaryTakeover: ['quota-temporary', 'login-expired'].includes(scenario),
-			},
-		}
-	);
-	const file = path.join(native.data, 'teams', team.id, 'ledger.jsonl');
-	const events = (): LedgerEvent[] =>
-		fs
-			.readFileSync(file, 'utf8')
-			.trim()
-			.split('\n')
-			.filter(Boolean)
-			.map((row) => JSON.parse(row));
-	const state = () => reduceLedger(events());
-	const cli = (...args: string[]) => native.cli('team', ...args, '--team', team.id);
-	const confirm = async () => {
-		await expect
-			.poll(() => state().openCards.some((c) => c.boundary === 'baseline'), { timeout: 90_000 })
-			.toBe(true);
-		await cli('baseline', 'confirm');
-	};
-	// Only mutate stopped fixture persistence to advance a clock or reproduce a crash boundary.
-	const restartWith = async (
-		change: (rows: LedgerEvent[]) => void,
-		waits?: (records: FollowUp[]) => void
-	) => {
-		await native.close();
-		const rows = events();
-		change(rows);
-		fs.writeFileSync(file, rows.map((row) => JSON.stringify(row)).join('\n') + '\n');
-		if (waits) {
-			const waitFile = path.join(native.data, 'follow-ups.json');
-			const records: FollowUp[] = JSON.parse(fs.readFileSync(waitFile, 'utf8'));
-			waits(records);
-			fs.writeFileSync(waitFile, JSON.stringify(records));
-		}
-		await native.start();
-	};
-	return { native, team, gate, events, state, cli, confirm, restartWith };
-}
 
 for (const scenario of ['quota-wait', 'quota-substitute', 'quota-temporary'] as const) {
 	// eslint-disable-next-line no-empty-pattern
@@ -222,9 +119,16 @@ for (const fault of [
 					await expect
 						.poll(() => f.state().openCards.some((c) => c.boundary === 'login'))
 						.toBe(true);
-					expect(f.state().openCards.find((c) => c.boundary === 'login')!.body).toContain(
-						'claude-code'
-					);
+					const login = f.state().openCards.find((c) => c.boundary === 'login')!;
+					const accountDir = f.team.seats.pm.customEnv!.CLAUDE_CONFIG_DIR;
+					expect(login.payload).toMatchObject({
+						type: 'escalation',
+						provider: 'claude-code',
+						accountSeat: 'pm',
+						accountDir,
+					});
+					expect(login.body).toContain('Claude Code');
+					expect(login.body).toContain(accountDir);
 					await expect.poll(() => f.state().seats.pm.takeover).toBe('temporary');
 				}
 			}
@@ -371,9 +275,7 @@ test('M3 T17 restart inspects interrupted external effects and reconciles the ex
 		expect(f.state().turns.find((t) => t.dispatchId === work.dispatchId)?.finished).toBeUndefined();
 		// Interrupt before the logical completion event. Closing normally can drain
 		// the provider and finish the turn, which would not exercise recovery.
-		const closed = f.native.app.waitForEvent('close');
-		f.native.app.process().kill('SIGKILL');
-		await closed;
+		await f.native.forceQuit();
 		for (const seat of ['pm', 'dev', 'qa'] as const) {
 			const pidFile = path.join(f.native.root, `${seat}-account`, 'fixture-process');
 			if (!fs.existsSync(pidFile)) continue;
@@ -412,28 +314,7 @@ test('M3 T11 three persisted no-progress attempts include a reworded repeat and 
 			.poll(() => f.state().openCards.some((c) => c.boundary === 'baseline'), { timeout: 90_000 })
 			.toBe(true);
 		await f.cli('pause');
-		await f.restartWith((rows) => {
-			for (let index = 0; index < 3; index++)
-				rows.push({
-					id: `synthetic-attempt:${index}`,
-					at: Date.now(),
-					seq: rows.length + 1,
-					actor: 'app',
-					kind: 'attempt',
-					problemId: 'checks',
-					initialFailures: ['synthetic-check'],
-					attempt: {
-						id: `synthetic-attempt:${index}`,
-						category: ['locate', 'experiment', 'change'][index],
-						plan: `Different wording ${index}`,
-						basis: 'Synthetic persisted app observation',
-						difference: 'No observed improvement',
-						expectation: 'The check should pass',
-						fingerprint: index === 1 ? 'change:0' : `change:${index}`,
-						failures: ['synthetic-check'],
-					},
-				});
-		});
+		await f.restartWith(seedM3Attempts);
 		await f.cli('baseline', 'confirm');
 		await f.cli('resume');
 		await expect

@@ -108,6 +108,18 @@ export function createTeamRuntime(
 						customArgs: config.seats[seat].customArgs,
 						customEnv: config.seats[seat].customEnv,
 					},
+		seatAccountDir: (config, source, model) => {
+			const tool = model?.tool ?? config.seats[source].tool;
+			return resolveAgentAccountDir(
+				{
+					toolType: tool,
+					customEnvVars:
+						tool === config.seats[source].tool ? config.seats[source].customEnv : undefined,
+					sshRemote: !!config.sshRemoteId,
+				},
+				getAgentAccountDirLayers(tool)
+			);
+		},
 		reconcile: async (request) => {
 			// Inspect the workspace as well as native history before deciding to repeat a turn.
 			await execGitReadOnly(['status', '--porcelain'], request.cwd);

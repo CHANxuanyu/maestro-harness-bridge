@@ -16,6 +16,28 @@ MAESTRO_E2E_PERF=1 MAESTRO_PERF_ROUNDS=3 MAESTRO_PERF_BEFORE_ENTRY=/absolute/bef
 
 ## 阶段筛选
 
+B1 模型选择器单独用 `MAESTRO_PERF_STAGES=picker`。它只依赖 startup，
+额外准备一条 1000 条消息的合成对话，等待首尾显示行就绪后打开选择器。
+`large.picker.1000.ms` 从打开组合键的主键事件时间算起，到第一个可见且
+焦点就绪的动画帧；旧选择器还要退出 Loading options。两种选择器用同一
+探针，既不等待 IPC 往返计时，也不把一次 React 渲染耗时当作键盘延迟。
+`newPicker` 区分新旧表面；新表面每轮须不超过 100 ms。这个阶段是显式
+选择的，不改变默认长对话基准的操作序列，也不运行真实模型。
+
+本次沙箱不能启动 Electron。修改前的基线源码为
+`4e87704b29b5fde6592b4b71b5cd2b8de361763a`；旧选择器和新选择器的
+毫秒值都未测，不以 jsdom 或类型检查代替。先按前节冻结该基线的完整
+`dist`，再构建当前源码，使用同一台机器运行：
+
+```sh
+MAESTRO_E2E_PERF=1 MAESTRO_PERF_ROUNDS=3 MAESTRO_PERF_STAGES=picker MAESTRO_PERF_BEFORE_ENTRY=/absolute/before/dist/main/index.js npx playwright test e2e/perf-renderer.spec.ts --project=electron --workers=1 --retries=0 --output=/absolute/results/model-picker
+```
+
+结果由现有 `RendererRun.stage()` 写入 JSON/JSONL，含两份构建文件哈希和
+每轮阶段状态。100 ms 门槛在记录落盘后检查，失败时仍能看到实测数字。
+原始输出保留在仓库外。外部还需运行 `e2e/native-model-picker.spec.ts`，
+核对真实窗口焦点、D7 夹具增量、D8 重启记忆和 D9 运行中 Esc。
+
 `MAESTRO_PERF_STAGES` 接受逗号分隔的 `startup,history,native,switch,backfill,ids,scroll,stream`。未设置时全跑；空值、拼写错误直接报错。自动补足必要前置阶段，并在 JSON 的 `requestedStages` 和 `effectiveStages` 中分别记录。选中 `startup` 才跑空数据启动；其他选择只跑大数据样本所需的启动。
 
 | 选择            | 实际执行的测量阶段                                       |

@@ -17,6 +17,60 @@ const statusOf = (entries: EventInput[], id = 'A1') =>
 	reduceLedger(ledger(...entries)).criteria.find((c) => c.id === id)?.status;
 
 describe('reduceLedger', () => {
+	it('counts owner messages and wake dispatches once and retains substitute history', () => {
+		const events = ledger(
+			{ kind: 'team_created', config },
+			{
+				kind: 'owner_message',
+				actor: 'owner',
+				messageId: 'note',
+				text: 'Keep the scope',
+				to: 'pm',
+			},
+			{ kind: 'message_delivered', messageId: 'note', seat: 'pm' },
+			{
+				kind: 'owner_message',
+				actor: 'owner',
+				messageId: 'note',
+				text: 'Keep the scope',
+				to: 'pm',
+			},
+			{
+				kind: 'turn_dispatched',
+				seat: 'pm',
+				dispatchId: 'wake',
+				turn: 'topic',
+				mode: 'wake',
+				promptDigest: 'wake',
+			},
+			{
+				kind: 'turn_dispatched',
+				seat: 'pm',
+				dispatchId: 'wake',
+				turn: 'topic',
+				mode: 'wake',
+				promptDigest: 'wake',
+			},
+			{
+				kind: 'substitute_took_over',
+				seat: 'dev',
+				model: { tool: 'claude-code', model: 'sonnet' },
+			},
+			{
+				kind: 'seat_bound',
+				seat: 'dev',
+				model: config.seats.dev,
+				workspace: '/project/dev',
+				reason: 'restored',
+			}
+		);
+		expect(reduceLedger([...events, ...events]).statistics).toMatchObject({
+			ownerMessages: 1,
+			wakes: 1,
+			substitutions: 1,
+			turns: 1,
+		});
+	});
 	it('replays the complete direct path through owner acceptance', () => {
 		const entries: EventInput[] = [{ kind: 'team_created', config }];
 		for (const seat of ['pm', 'dev', 'qa'] as const)
@@ -804,6 +858,9 @@ describe('reduceLedger', () => {
 			expect(state.terminal).toBe(terminal);
 			expect(state.statistics).toEqual({
 				ownerDecisions: 2,
+				ownerMessages: 0,
+				wakes: 0,
+				substitutions: 0,
 				discussions: 0,
 				rejections: terminal === 'all' ? 0 : 1,
 				retros: terminal === 'all' ? 0 : 1,

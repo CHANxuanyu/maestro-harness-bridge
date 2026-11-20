@@ -14,7 +14,7 @@ import { useT } from '../../i18n';
  * Escape denies (fail-safe: the agent gets a clear "no", never a hang).
  */
 
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { UseInterruptHandlerReturn } from '../../hooks/agent/useInterruptHandler';
 import { createPortal } from 'react-dom';
 import { ShieldQuestion, Check, X, MessagesSquare } from 'lucide-react';
@@ -79,6 +79,15 @@ function PermissionPromptInner({ theme, onStopTurn }: PermissionPromptProps) {
 			: undefined
 	);
 
+	const [inlineHost, setInlineHost] = useState<HTMLElement | null>(null);
+	const activeOwnerId = useSessionStore((state) => state.activeSessionId);
+	useLayoutEffect(() => {
+		setInlineHost(
+			newShell && request && request.kind !== 'question'
+				? document.getElementById(`turn-approval:${request.sessionId}`)
+				: null
+		);
+	}, [newShell, request, activeOwnerId, session?.activeTabId]);
 	const stopping = !!request && stoppingId === request.requestId;
 	const blocked = responding || stopping;
 	const onStop = async () => {
@@ -209,23 +218,29 @@ function PermissionPromptInner({ theme, onStopTurn }: PermissionPromptProps) {
 
 	return createPortal(
 		<div
-			className="fixed inset-0 z-[1008] flex items-center justify-center select-none"
-			style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+			className={
+				inlineHost
+					? 'select-none py-2'
+					: 'fixed inset-0 z-[1008] flex items-center justify-center select-none'
+			}
+			style={inlineHost ? undefined : { backgroundColor: 'rgba(0,0,0,0.45)' }}
 		>
 			<div
 				role="dialog"
-				aria-modal="true"
+				aria-modal={inlineHost ? undefined : true}
 				data-testid="permission-prompt"
 				key={request.requestId}
 				aria-label={uiText('workflows.sessions.permissionRequest')}
 				className={
-					newShell
-						? 'w-[560px] max-w-[90vw] rounded-lg shadow-lg border p-5'
-						: 'w-[520px] max-w-[90vw] rounded-xl shadow-2xl border p-5'
+					inlineHost
+						? 'w-full rounded-lg border p-4'
+						: newShell
+							? 'w-[560px] max-w-[90vw] rounded-lg shadow-lg border p-5'
+							: 'w-[520px] max-w-[90vw] rounded-xl shadow-2xl border p-5'
 				}
 				style={{
 					backgroundColor: newShell ? theme.colors.bgMain : theme.colors.bgSidebar,
-					borderColor: theme.colors.border,
+					borderColor: newShell ? theme.colors.accent : theme.colors.border,
 					color: theme.colors.textMain,
 				}}
 			>
@@ -326,7 +341,7 @@ function PermissionPromptInner({ theme, onStopTurn }: PermissionPromptProps) {
 				</div>
 			</div>
 		</div>,
-		document.body
+		inlineHost ?? document.body
 	);
 }
 

@@ -36,6 +36,7 @@ import { PermissionModeMenu } from './PermissionModeMenu';
 import { effectiveStandardPermissionCapability } from '../../../../shared/codexAppServer';
 import { toClaudeTokenModeSource } from '../../../../shared/claudeTokenMode';
 import { ModelEffortPills } from './ModelEffortPills';
+import { ConversationModelEffortPicker } from '../../ConversationModelEffortPicker';
 import { StopTurnButton } from '../../ui/StopTurnButton';
 
 interface ToolbarControlsProps {
@@ -302,6 +303,19 @@ export const ToolbarControls = memo(function ToolbarControls({
 		[session.id, activeTabId]
 	);
 
+	const catalogPicker =
+		newShell && isAiMode && (session.toolType === 'codex' || session.toolType === 'claude-code') ? (
+			<ConversationModelEffortPicker
+				session={session}
+				theme={theme}
+				currentModel={currentModel}
+				currentEffort={currentEffort}
+				availableModels={availableModels}
+				availableEfforts={availableEfforts}
+				shortcutKeys={modelEffortKeys}
+			/>
+		) : null;
+
 	// Phone: the row holds only what a thumb reaches for mid-sentence - attach an
 	// image, send, and the "..." that opens every other setting as a half-screen
 	// sheet. The prompt composer and the notification bell are dropped outright
@@ -409,6 +423,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 						<MoreHorizontal className="w-5 h-5" />
 					</button>
 				</div>
+				{catalogPicker && <div className="flex justify-end px-2 pb-2">{catalogPicker}</div>}
 				{isAiMode && (
 					<ComposerOptionsSheet
 						open={optionsSheetOpen}
@@ -431,10 +446,10 @@ export const ToolbarControls = memo(function ToolbarControls({
 						}
 						currentModel={currentModel}
 						availableModels={availableModels}
-						onModelChange={onModelChange}
+						onModelChange={catalogPicker ? undefined : onModelChange}
 						currentEffort={currentEffort}
 						availableEfforts={availableEfforts}
-						onEffortChange={onEffortChange}
+						onEffortChange={catalogPicker ? undefined : onEffortChange}
 					/>
 				)}
 			</>
@@ -649,24 +664,26 @@ export const ToolbarControls = memo(function ToolbarControls({
 						{t('workflows.shell.contextUsage', { percent: Math.round(contextUsage) })}
 					</span>
 				)}
-				<ModelEffortPills
-					allowModelSelection={newShell && hasModelSelectionCapability}
-					isVisible={isAiMode}
-					theme={theme}
-					shortcutKeys={modelEffortKeys}
-					currentModel={currentModel}
-					currentEffort={currentEffort}
-					availableModels={availableModels}
-					availableEfforts={availableEfforts}
-					onModelChange={onModelChange}
-					onEffortChange={onEffortChange}
-					modelMenuOpen={modelMenuOpen}
-					setModelMenuOpen={setModelMenuOpen}
-					modelMenuRef={modelMenuRef}
-					effortMenuOpen={effortMenuOpen}
-					setEffortMenuOpen={setEffortMenuOpen}
-					effortMenuRef={effortMenuRef}
-				/>
+				{catalogPicker ?? (
+					<ModelEffortPills
+						allowModelSelection={newShell && hasModelSelectionCapability}
+						isVisible={isAiMode}
+						theme={theme}
+						shortcutKeys={modelEffortKeys}
+						currentModel={currentModel}
+						currentEffort={currentEffort}
+						availableModels={availableModels}
+						availableEfforts={availableEfforts}
+						onModelChange={onModelChange}
+						onEffortChange={onEffortChange}
+						modelMenuOpen={modelMenuOpen}
+						setModelMenuOpen={setModelMenuOpen}
+						modelMenuRef={modelMenuRef}
+						effortMenuOpen={effortMenuOpen}
+						setEffortMenuOpen={setEffortMenuOpen}
+						effortMenuRef={effortMenuRef}
+					/>
+				)}
 				{trailing}
 			</div>
 		</div>

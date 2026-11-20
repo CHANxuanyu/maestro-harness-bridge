@@ -1,3 +1,5 @@
+import { subscribeTeamNavigation, useTeamStore } from '../stores/teamStore';
+import { TeamSetupHost } from './Team/TeamView';
 import { TerminalViewProvider } from './TerminalView';
 import type { UseInterruptHandlerReturn } from '../hooks/agent/useInterruptHandler';
 import { shellFeatureVisible } from '../../shared/newShellFeatures';
@@ -64,6 +66,7 @@ export interface AppShellProps {
 	logViewerOpen: boolean;
 	logViewer: ReactNode | null;
 	groupChatView: ReactNode | null;
+	teamView?: ReactNode;
 
 	hasSessions: boolean;
 	sessionsLoaded: boolean;
@@ -106,6 +109,7 @@ function AppShellContent({
 	logViewerOpen,
 	logViewer,
 	groupChatView,
+	teamView,
 	hasSessions,
 	sessionsLoaded,
 	emptyStateProps,
@@ -126,6 +130,10 @@ function AppShellContent({
 	// activeSession into the shell (busy/log flushes stay off this paint path when
 	// App's chrome equality ignores state).
 	const newShell = useSettingsStore(selectNewShellEnabled);
+	const activeTeamId = useTeamStore((s) => s.activeTeamId);
+	const teamActive = newShell && !!activeTeamId;
+	const hasTeams = useTeamStore((s) => Object.keys(s.teams).length > 0) && newShell;
+	const hasSidebarProjects = hasSessions || hasTeams;
 	const t = useT();
 	useEffect(() => {
 		document.documentElement.dataset.newShell = String(newShell);
@@ -230,11 +238,18 @@ function AppShellContent({
 			{modals}
 			{standaloneModals}
 
-			{!hasSessions && (!sessionsLoaded || !sessionsReadOk) && !isMobileLandscape ? (
+			{!teamActive &&
+			!hasSidebarProjects &&
+			(!sessionsLoaded || !sessionsReadOk) &&
+			!isMobileLandscape ? (
 				<AgentsLoadingView theme={theme} readFailed={sessionsLoaded && !sessionsReadOk} />
 			) : null}
 
-			{!hasSessions && sessionsLoaded && sessionsReadOk && !isMobileLandscape ? (
+			{!teamActive &&
+			!hasSidebarProjects &&
+			sessionsLoaded &&
+			sessionsReadOk &&
+			!isMobileLandscape ? (
 				newShell ? (
 					<>
 						<aside
@@ -272,7 +287,7 @@ function AppShellContent({
 			    bubble through it. useSwipeGestures only preventDefaults once a
 			    gesture locks HORIZONTAL, so vertical scrolling inside the drawer is
 			    untouched, and neither drawer scrolls sideways. */}
-			{!isMobileLandscape && hasSessions && (
+			{!isMobileLandscape && hasSidebarProjects && (
 				<ErrorBoundary>
 					<div
 						className="contents"
@@ -282,6 +297,9 @@ function AppShellContent({
 						<SessionList {...sessionListProps} />
 					</div>
 				</ErrorBoundary>
+			)}
+			{!hasSessions && hasTeams && !teamActive && !logViewerOpen && !isMobileLandscape && (
+				<ProjectStartView theme={theme} />
 			)}
 
 			<PluginPanelSlot
@@ -300,8 +318,8 @@ function AppShellContent({
 			  drawer in a group chat, so opening THAT still earns a backdrop.
 			*/}
 			{isNarrowViewport &&
-				hasSessions &&
-				(leftSidebarOpen || (rightPanelOpen && !activeGroupChatId)) && (
+				hasSidebarProjects &&
+				(leftSidebarOpen || (rightPanelOpen && !activeGroupChatId && !teamActive)) && (
 					<div
 						className="maestro-mobile-backdrop"
 						onClick={onCloseDrawers}
@@ -312,9 +330,13 @@ function AppShellContent({
 
 			{logViewer}
 
-			{shellFeatureVisible('groupChat', newShell) && groupChatView}
+			{!teamActive && shellFeatureVisible('groupChat', newShell) && groupChatView}
+
+			{teamActive && !logViewerOpen && teamView}
+			{newShell && <TeamSetupHost theme={theme} />}
 
 			{hasSessions &&
+				!teamActive &&
 				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
 				!logViewerOpen && <MainPanel ref={mainPanelRef} {...mainPanelProps} />}
 
@@ -326,6 +348,7 @@ function AppShellContent({
 
 			{!isMobileLandscape &&
 				hasSessions &&
+				!teamActive &&
 				(!shellFeatureVisible('groupChat', newShell) || !activeGroupChatId) &&
 				!logViewerOpen && (
 					<ErrorBoundary>
@@ -380,6 +403,8 @@ function AppShellContent({
 }
 
 export function AppShell(props: AppShellProps) {
+	// Leaving a conversation, file, browser or terminal tab for anything else closes the team slot.
+	useEffect(() => subscribeTeamNavigation(), []);
 	return (
 		<TerminalViewProvider>
 			<AppShellContent {...props} />

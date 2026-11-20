@@ -3,6 +3,7 @@ import type {
 	CreateTeamInput,
 	BaselineDiff,
 	Brief,
+	Criterion,
 	TeamTurnLog,
 	LedgerEvent,
 	SeatRole,
@@ -10,9 +11,9 @@ import type {
 	TeamAction,
 	TeamConfig,
 	TeamStatusView,
+	TeamSeatTranscript,
 	QueuedTeamMessage,
 } from '../../shared/team/types';
-import type { AgentId } from '../../shared/agentIds';
 
 export function createTeamApi() {
 	return {
@@ -34,9 +35,10 @@ export function createTeamApi() {
 		baselineEdit: (
 			teamId: string,
 			criterionId: string,
-			text: string
+			text: string,
+			fields?: Partial<Pick<Criterion, 'proof' | 'how'>>
 		): Promise<{ brief: Brief; diff: BaselineDiff }> =>
-			ipcRenderer.invoke('team:baselineEdit', teamId, criterionId, text),
+			ipcRenderer.invoke('team:baselineEdit', teamId, criterionId, text, fields),
 		baselineDiff: (teamId: string): Promise<BaselineDiff> =>
 			ipcRenderer.invoke('team:baselineDiff', teamId),
 		baselineReturn: (teamId: string, note: string): Promise<void> =>
@@ -60,11 +62,10 @@ export function createTeamApi() {
 			ipcRenderer.invoke('team:action', teamId, action, detail),
 		requestChanges: (teamId: string, note: string): Promise<void> =>
 			ipcRenderer.invoke('team:requestChanges', teamId, note),
+		assignResidual: (teamId: string, itemId: string, owner: string | null): Promise<void> =>
+			ipcRenderer.invoke('team:assignResidual', teamId, itemId, owner),
 		export: (teamId: string): Promise<string> => ipcRenderer.invoke('team:export', teamId),
-		seatTranscript: (
-			teamId: string,
-			seat: SeatRole
-		): Promise<{ provider: AgentId; nativeSessionId?: string; cwd: string } | null> =>
+		seatTranscript: (teamId: string, seat: SeatRole): Promise<TeamSeatTranscript | null> =>
 			ipcRenderer.invoke('team:seatTranscript', teamId, seat),
 		onChanged: (
 			listener: (payload: { teamId: string; event: LedgerEvent }) => void

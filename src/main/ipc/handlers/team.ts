@@ -1,7 +1,13 @@
 import { ipcMain } from 'electron';
 import { withIpcErrorLogging } from '../../utils/ipcHandler';
 import type { TeamScheduler } from '../../team/scheduler';
-import type { CreateTeamInput, SeatRole, SeatModel, TeamAction } from '../../../shared/team/types';
+import type {
+	CreateTeamInput,
+	SeatRole,
+	Criterion,
+	SeatModel,
+	TeamAction,
+} from '../../../shared/team/types';
 
 /** The bridge passes no Electron sender; every handler only uses its arguments. */
 export function registerTeamHandlers(team: TeamScheduler): void {
@@ -22,8 +28,14 @@ export function registerTeamHandlers(team: TeamScheduler): void {
 	handle('answer', (id: string, card: string, option: string, note?: string) =>
 		team.answer(id, card, option, note)
 	);
-	handle('baselineEdit', (id: string, criterion: string, text: string) =>
-		team.baselineEdit(id, criterion, text)
+	handle(
+		'baselineEdit',
+		(
+			id: string,
+			criterion: string,
+			text: string,
+			fields?: Partial<Pick<Criterion, 'proof' | 'how'>>
+		) => team.baselineEdit(id, criterion, text, fields)
 	);
 	handle('baselineDiff', (id: string) => team.baselineDiff(id));
 	handle('baselineReturn', (id: string, note: string) => team.baselineReturn(id, note));
@@ -46,6 +58,9 @@ export function registerTeamHandlers(team: TeamScheduler): void {
 		team.action(id, action, detail)
 	);
 	handle('requestChanges', (id: string, note: string) => team.requestChanges(id, note));
+	handle('assignResidual', (id: string, item: string, owner: string | null) =>
+		team.assignResidual(id, item, owner)
+	);
 	handle('export', (id: string) => team.export(id));
 	handle('seatTranscript', (id: string, seat: SeatRole) => team.seatTranscript(id, seat));
 }

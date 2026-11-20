@@ -272,6 +272,9 @@ interface MaestroAPI {
 		accept(teamId: string, withGaps?: boolean): Promise<void>;
 		extend: ReturnType<typeof import('../main/preload/team').createTeamApi>['extend'];
 		seatSet: ReturnType<typeof import('../main/preload/team').createTeamApi>['seatSet'];
+		assignResidual: ReturnType<
+			typeof import('../main/preload/team').createTeamApi
+		>['assignResidual'];
 		seatSub: ReturnType<typeof import('../main/preload/team').createTeamApi>['seatSub'];
 		action: ReturnType<typeof import('../main/preload/team').createTeamApi>['action'];
 		/** Returns the current demonstration to implementation with the owner's exact note. */
@@ -282,11 +285,7 @@ interface MaestroAPI {
 		seatTranscript(
 			teamId: string,
 			seat: SeatRole
-		): Promise<{
-			provider: import('../shared/agentIds').AgentId;
-			nativeSessionId?: string;
-			cwd: string;
-		} | null>;
+		): Promise<import('../shared/team/types').TeamSeatTranscript | null>;
 		/** Emitted after every durable append. Subscribe before get(), then deduplicate by event.id/seq. */
 		onChanged(listener: (payload: { teamId: string; event: LedgerEvent }) => void): () => void;
 	};
@@ -481,9 +480,12 @@ interface MaestroAPI {
 			}) => void
 		) => () => void;
 		/** `signal` is set only when the process was killed by a signal, never on a clean exit. */
-		onExit: (
-			callback: (sessionId: string, code: number, signal?: number, interrupted?: boolean) => void
-		) => () => void;
+		onExit: ReturnType<
+			typeof import('../main/preload/process/core').createProcessCoreApi
+		>['onExit'];
+		onTurnDelivery: ReturnType<
+			typeof import('../main/preload/process/core').createProcessCoreApi
+		>['onTurnDelivery'];
 		steer: ReturnType<typeof import('../main/preload/process/core').createProcessCoreApi>['steer'];
 		onPermissionResolved: ReturnType<
 			typeof import('../main/preload/process/core').createProcessCoreApi
@@ -1915,6 +1917,7 @@ interface MaestroAPI {
 	};
 	agents: {
 		getNativeCommands: import('../main/preload/agents').AgentsApi['getNativeCommands'];
+		getModelCatalog: import('../main/preload/agents').AgentsApi['getModelCatalog'];
 		getPresets: import('../main/preload/agents').AgentsApi['getPresets'];
 		prepareDeepSeekPreset: import('../main/preload/agents').AgentsApi['prepareDeepSeekPreset'];
 		detect: (sshRemoteId?: string) => Promise<AgentConfig[]>;

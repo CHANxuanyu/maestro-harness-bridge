@@ -406,3 +406,22 @@ export function formatTurnDuration(ms: number): string {
 		fallback: '<1m',
 	});
 }
+
+/** New-shell running counters: ten-second steps below a minute, then whole minutes. */
+export function steppedElapsedTime(ms: number): { elapsedMs: number; nextUpdateMs: number } {
+	const safe = Number.isFinite(ms) && ms > 0 ? ms : 0;
+	const step = safe < DURATION_MS.minute ? 10 * DURATION_MS.second : DURATION_MS.minute;
+	const elapsedMs = Math.floor(safe / step) * step;
+	return { elapsedMs, nextUpdateMs: step - (safe - elapsedMs) };
+}
+
+/** The caller supplies the localized initial label; all unit formatting stays in this engine. */
+export function formatSteppedElapsed(ms: number, justStarted: string): string {
+	const { elapsedMs } = steppedElapsedTime(ms);
+	return elapsedMs === 0
+		? justStarted
+		: humanizeDuration(elapsedMs, {
+				units: elapsedMs < DURATION_MS.minute ? ['second'] : ['day', 'hour', 'minute'],
+				maxUnits: 3,
+			});
+}

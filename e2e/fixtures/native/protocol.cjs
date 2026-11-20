@@ -93,6 +93,50 @@ function createTurn({
 	return {
 		id,
 		file,
+		note(text) {
+			if (provider === 'claude') claudeMessage('assistant', [{ type: 'text', text }]);
+			else {
+				rollout('response_item', {
+					type: 'message',
+					role: 'assistant',
+					phase: 'commentary',
+					content: [{ type: 'output_text', text }],
+				});
+				emit({
+					type: 'item.completed',
+					item: { id: randomUUID(), type: 'agent_message', phase: 'commentary', text },
+				});
+			}
+		},
+		plan(plan) {
+			if (provider !== 'codex') throw new Error('Plan fixture is Codex only');
+			rollout('response_item', {
+				type: 'custom_tool_call',
+				call_id: randomUUID(),
+				name: 'exec',
+				input: `text(await tools.update_plan(${JSON.stringify({ plan })}))`,
+			});
+			emit({
+				type: 'item.completed',
+				item: {
+					id: 'fixture-plan',
+					type: 'todo_list',
+					items: plan.map((item) => ({ text: item.step, completed: item.status === 'completed' })),
+				},
+			});
+		},
+		fail(message) {
+			if (provider === 'claude')
+				emit({
+					type: 'result',
+					subtype: 'error_during_execution',
+					is_error: true,
+					errors: [message],
+					result: message,
+					session_id: id,
+				});
+			else emit({ type: 'turn.failed', error: { message } });
+		},
 		startTool(tool) {
 			if (provider === 'claude')
 				claudeMessage('assistant', [
@@ -103,7 +147,23 @@ function createTurn({
 						input: tool.input || { command: tool.command },
 					},
 				]);
-			else {
+			else if (tool.name === 'file_change') {
+				rollout('response_item', {
+					type: 'custom_tool_call',
+					call_id: tool.id,
+					name: 'apply_patch',
+					input: tool.input.patch,
+				});
+				emit({
+					type: 'item.started',
+					item: {
+						id: tool.id,
+						type: 'file_change',
+						status: 'in_progress',
+						changes: tool.input.changes,
+					},
+				});
+			} else {
 				rollout('response_item', {
 					type: 'function_call',
 					call_id: tool.id,
@@ -141,7 +201,17 @@ function createTurn({
 						is_error: status !== 'completed',
 					},
 				]);
-			else {
+			else if (tool.name === 'file_change') {
+				rollout('response_item', {
+					type: 'custom_tool_call_output',
+					call_id: tool.id,
+					output: 'Success. Updated files.',
+				});
+				emit({
+					type: 'item.completed',
+					item: { id: tool.id, type: 'file_change', status, changes: tool.input.changes },
+				});
+			} else {
 				// ExecCommandToolOutput::response_header in the pinned core/src/tools/context.rs.
 				rollout('response_item', {
 					type: 'function_call_output',

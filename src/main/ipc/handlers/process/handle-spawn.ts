@@ -1,3 +1,5 @@
+import { beginGitTurn, finishGitTurn } from '../../../git-changes';
+import { NATIVE_MODEL_DEFAULT } from '../../../../shared/modelCatalog';
 import {
 	codexAppServerEnabled,
 	CODEX_APP_SERVER_MESSAGES,
@@ -1052,8 +1054,14 @@ export async function handleProcessSpawn(
 			config.permissionMode === 'full' || (!hasExplicitPermissionMode && config.yoloMode === true);
 		codexAppServer = {
 			threadId: config.agentSessionId,
-			model: config.sessionCustomModel || agentConfigValues.model || config.modelId || undefined,
-			effort: config.sessionCustomEffort || agentConfigValues.reasoningEffort || undefined,
+			model:
+				config.sessionCustomModel === NATIVE_MODEL_DEFAULT
+					? undefined
+					: config.sessionCustomModel || agentConfigValues.model || config.modelId || undefined,
+			effort:
+				config.sessionCustomEffort === NATIVE_MODEL_DEFAULT
+					? undefined
+					: config.sessionCustomEffort || agentConfigValues.reasoningEffort || undefined,
 			approvalPolicy: isReadOnly || fullAccess ? 'never' : 'on-request',
 			sandbox: isReadOnly ? 'read-only' : fullAccess ? 'danger-full-access' : 'workspace-write',
 			writableRoots: config.sessionAdditionalDirectories
@@ -1085,10 +1093,23 @@ export async function handleProcessSpawn(
 					sshRemoteUsed ?? undefined
 				).key
 			: undefined;
+	if (settingsStore.get('newShell', false) && config.sessionId.includes('-ai-')) {
+		try {
+			void beginGitTurn(
+				config.sessionId,
+				config.cwd,
+				sshRemoteUsed ?? undefined,
+				sshRemoteUsed ? config.cwd : undefined
+			).catch((error) => logger.warn('Turn change boundary unavailable', 'Process', error));
+		} catch (error) {
+			logger.warn('Turn change boundary unavailable', 'Process', error);
+		}
+	}
 	let result: ReturnType<ProcessManager['spawn']>;
 	try {
 		result = processManager.spawn({
 			...config,
+			newShellActivity: settingsStore.get('newShell', false),
 			nativeCommandScopeKey,
 			command: commandToSpawn,
 			args: codexAppServer ? ['app-server', '-c', 'tools.update_plan.enabled=true'] : argsToSpawn,
@@ -1131,10 +1152,14 @@ export async function handleProcessSpawn(
 			extraPathDirs: localAgentBinDir ? [localAgentBinDir] : undefined,
 		});
 	} catch (error) {
+		finishGitTurn(config.sessionId, true);
 		codexAppServer?.onDispose?.();
 		throw error;
 	}
-	if (!result.success) codexAppServer?.onDispose?.();
+	if (!result.success) {
+		finishGitTurn(config.sessionId, true);
+		codexAppServer?.onDispose?.();
+	}
 
 	// The prime outran the spawn cap, so the process started without a usable
 	// catalog and its first usage event carries the 200k fallback. Close the loop:

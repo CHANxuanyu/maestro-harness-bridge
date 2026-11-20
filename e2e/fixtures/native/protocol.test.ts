@@ -29,9 +29,14 @@ import { ClaudeOutputParser } from '../../../src/main/parsers/claude-output-pars
 import { CodexOutputParser } from '../../../src/main/parsers/codex-output-parser';
 import { ClaudeSessionStorage } from '../../../src/main/storage/claude-session-storage';
 import { CodexSessionStorage } from '../../../src/main/storage/codex-session-storage';
+import { transcriptMessagesToLogEntries } from '../../../src/renderer/utils/transcriptMessages';
+import {
+	latestAgentTaskList,
+	extractAgentTaskList,
+} from '../../../src/renderer/utils/agentTaskList';
 
 const require = createRequire(import.meta.url);
-const { transcriptPath } = require('./protocol.cjs');
+const { transcriptPath, createTurn } = require('./protocol.cjs');
 const { appendTurn } = require('./append-turn.cjs');
 const { startAppServer } = require('./app-server.cjs');
 const { runSharedExec } = require('../../../scripts/codex-shared/shared-exec.cjs');
@@ -41,8 +46,101 @@ afterEach(() => {
 	for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
+it('restores the activity fixture script plan from native history with no saved display logs', async () => {
+	const root = createNativeTempDir('maestro-plan-restore-');
+	roots.push(root);
+	const events: Record<string, unknown>[] = [];
+	const turn = createTurn({
+		provider: 'codex',
+		configDir: root,
+		cwd: root,
+		prompt: 'Restore this plan from native history',
+		emit: (event: Record<string, unknown>) => events.push(event),
+	});
+	turn.plan([
+		{ step: 'Inspect files', status: 'completed' },
+		{ step: 'Review result', status: 'pending' },
+	]);
+	const tool = { id: 'hold', command: 'printf ready', output: 'ready' };
+	turn.startTool(tool);
+	turn.finishTool(tool);
+	turn.finish('PLAN_RESTORE_DONE');
+	const before = fs.readFileSync(turn.file, 'utf8');
+	expect(before).toContain('tools.update_plan');
+	const history = await new CodexSessionStorage().readSessionMessages(root, turn.id, {
+		configDir: root,
+		readOnly: true,
+	});
+	const restored = latestAgentTaskList(transcriptMessagesToLogEntries(history.messages));
+	const parser = new CodexOutputParser();
+	const live = events
+		.map((event) => parser.parseJsonObject(event))
+		.find((event) => extractAgentTaskList(event?.toolState?.input));
+	expect(restored).toEqual(extractAgentTaskList(live?.toolState?.input));
+	expect(restored).toMatchObject({
+		completed: 1,
+		tasks: [
+			{ content: 'Inspect files', status: 'completed' },
+			{ content: 'Review result', status: 'pending' },
+		],
+	});
+	expect(fs.readFileSync(turn.file, 'utf8')).toBe(before);
+});
+
 for (const provider of ['claude', 'codex']) {
 	describe(provider, () => {
+		it('emits three ordered public notes between sequential calls without repeating the answer', async () => {
+			const root = createNativeTempDir('maestro-native-activity-');
+			roots.push(root);
+			const script = path.join(root, 'script.json');
+			const notes = ['Inspecting inputs', 'Checking behavior', 'Verifying output'];
+			fs.writeFileSync(
+				script,
+				JSON.stringify({
+					turns: [
+						{
+							answer: 'Activity complete',
+							sequentialTools: true,
+							toolDelay: 1,
+							narrations: notes.map((text, beforeTool) => ({ text, beforeTool })),
+							tools: notes.map((_, index) => ({
+								id: `step-${index}`,
+								command: 'printf ok',
+								output: 'ok',
+							})),
+						},
+					],
+				})
+			);
+			const args =
+				provider === 'claude' ? ['--print', '--output-format', 'stream-json'] : ['exec', '--json'];
+			const { stdout } = await exec(
+				process.execPath,
+				[path.resolve(`e2e/fixtures/native/${provider}`), ...args, '--', 'Activity'],
+				{
+					cwd: root,
+					env: {
+						...process.env,
+						CLAUDE_CONFIG_DIR: root,
+						CODEX_HOME: root,
+						MAESTRO_NATIVE_SCRIPT: script,
+					},
+				}
+			);
+			const parser = provider === 'claude' ? new ClaudeOutputParser() : new CodexOutputParser();
+			const events = stdout
+				.trim()
+				.split('\n')
+				.map((line) => parser.parseJsonLine(line))
+				.filter(Boolean);
+			expect(
+				events.flatMap(
+					(event) => event?.publicNarration ?? (event?.isCommentary ? [event.text] : [])
+				)
+			).toEqual(notes);
+			expect(events.filter((event) => event && parser.isResultMessage(event))).toHaveLength(1);
+			expect(events.some((event) => event?.text === 'Activity complete')).toBe(true);
+		});
 		it('SIGINT records a native cancellation before exit', async () => {
 			const root = createNativeTempDir('maestro-native-stop-');
 			roots.push(root);
@@ -136,8 +234,9 @@ for (const provider of ['claude', 'codex']) {
 				.split('\n')
 				.map((line) => parser.parseJsonLine(line))
 				.filter(Boolean);
-			const id = events.find((event) => event?.sessionId)?.sessionId!;
+			const id = events.find((event) => event?.sessionId)?.sessionId;
 			expect(id).toBeTruthy();
+			if (!id) throw new Error('Fixture did not emit a session ID');
 			const storage =
 				provider === 'claude' ? new ClaudeSessionStorage() : new CodexSessionStorage();
 			const file = transcriptPath(provider, root, root, id);

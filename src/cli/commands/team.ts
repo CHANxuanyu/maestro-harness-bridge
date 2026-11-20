@@ -35,10 +35,13 @@ interface TeamOptions {
 	to?: string;
 	note?: string;
 	text?: string;
+	proof?: string;
+	how?: string;
 	seat?: string;
 	hours?: string;
 	withGaps?: boolean;
 	wait?: boolean;
+	owner?: string;
 }
 
 /** Parse provider-native model/effort names; reject unknown providers and Codex Ultra. */
@@ -165,7 +168,19 @@ export async function teamCommand(
 					const text = options.text ?? args.slice(2).join(' ');
 					if (!args[1] || !text.trim())
 						throw new Error('baseline edit requires a criterion and --text or replacement text');
-					result = await invoke('baselineEdit', id, args[1], text);
+					if (options.proof !== undefined && !['app', 'qa', 'pm'].includes(options.proof))
+						throw new Error('--proof expects app|qa|pm');
+					const fields = {
+						...(options.proof !== undefined ? { proof: options.proof } : {}),
+						...(options.how !== undefined ? { how: options.how } : {}),
+					};
+					result = await invoke(
+						'baselineEdit',
+						id,
+						args[1],
+						text,
+						...(Object.keys(fields).length ? [fields] : [])
+					);
 				} else if (args[0] === 'return') {
 					if (!options.note?.trim()) throw new Error('baseline return requires --note');
 					result = await invoke('baselineReturn', id, options.note);
@@ -175,6 +190,10 @@ export async function teamCommand(
 					if (!card) throw new Error('No baseline confirmation card');
 					await invoke('answer', id, card.id, 'confirm');
 				} else throw new Error('baseline expects confirm|edit|diff|return');
+			} else if (action === 'residual') {
+				if (args[0] !== 'assign' || !args[1] || options.owner === undefined)
+					throw new Error('Use residual assign <item> --owner <name>');
+				result = await invoke('assignResidual', id, args[1], options.owner.trim() || null);
 			} else if (action === 'extend')
 				result = await invoke('extend', id, {
 					...(options.hours ? { hours: Number(options.hours) } : {}),
@@ -269,9 +288,14 @@ export function registerTeamCommands(program: Command): void {
 	)
 		.option('--text <text>', 'Replacement criterion text')
 		.option('--note <text>', 'Reason for returning the baseline')
+		.option('--proof <kind>', 'Proof source: app, qa or pm')
+		.option('--how <text>', 'How the criterion will be proven')
 		.action((action, criterion, replacement, options) =>
 			teamCommand('baseline', [action, ...(criterion ? [criterion] : []), ...replacement], options)
 		);
+	command('residual <action> <item>', 'Assign the owner of an accepted residual item')
+		.requiredOption('--owner <name>', 'Follow-up owner; empty clears the assignment')
+		.action((action, item, options) => teamCommand('residual', [action, item], options));
 	command('log', 'Read the exact assigned prompts and seat replies')
 		.option('--seat <seat>', 'pm, dev or qa')
 		.action((options) => teamCommand('log', [], options));

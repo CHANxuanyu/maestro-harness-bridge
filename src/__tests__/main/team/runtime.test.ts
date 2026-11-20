@@ -1,3 +1,4 @@
+import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileTeamTurn, createTeamRuntime } from '../../../main/team/runtime';
 import { getSessionStorage } from '../../../main/agents';
@@ -68,7 +69,7 @@ describe('team production runtime', () => {
 		expect(result?.text).toBe('Visible result\n```team-report\n{}\n```');
 		expect(result?.nativeSessionId).toBe('native');
 		expect(storage.readSessionMessages).toHaveBeenNthCalledWith(2, '/work/dev', 'native', {
-			configDir: '/accounts/dev',
+			configDir: path.resolve('/accounts/dev'),
 			readOnly: true,
 			offset: 2,
 			limit: 500,
@@ -90,7 +91,11 @@ describe('team production runtime', () => {
 		expect(
 			(await reconcileTeamTurn({ ...request, nativeSessionId: undefined }))?.nativeSessionId
 		).toBe('ours');
-		expect(storage.listSessions).toHaveBeenCalledWith('/work/dev', undefined, '/accounts/dev');
+		expect(storage.listSessions).toHaveBeenCalledWith(
+			'/work/dev',
+			undefined,
+			path.resolve('/accounts/dev')
+		);
 	});
 
 	it('leaves a marked turn with only a progress note unfinished', async () => {

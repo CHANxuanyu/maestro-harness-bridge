@@ -261,6 +261,10 @@ owner request only, while the completion gate still checks every criterion.
 The actual validation and limitations are recorded in
 [team-m2-verification.md](team-m2-verification.md).
 
+### M2 renderer contract
+
+Owner cards keep human `body` text separate from typed `payload` data: baseline, discussion (including standard-change comparisons), check-permission, acceptance and progress-report. JSON payloads are never displayed as prose. `team.baselineEdit(teamId, criterionId, text, { proof?, how? })` extends the existing edit handler without changing the three-argument call; CLI equivalents are `team baseline edit <criterion> --text <text> --proof app|qa|pm --how <text>`. Only ledger events update the renderer mirror.
+
 ## M3 backend contract, 2026-11-18
 
 Effective configuration is the original config plus owner-authored
@@ -307,8 +311,24 @@ Added preload methods: `extend`, `seatSet`, `seatSub`, `action`, and the optiona
 `team.say()` returns a durable `{ status: 'queued', messageId, to }` receipt;
 delivery and handling remain separate ledger events. Omitted CLI recipients are
 explicitly PM, including across JSON transport.
-The renderer remains a separate implementation task. See
+The M3 renderer integration is described below. See
 [verification](team-m3-verification.md) for tested artifacts and open acceptance.
+
+## M3 renderer contract
+
+Seat rows and Members share `TeamSeatHealth` over `TeamState.seats` and
+`teamStatus()`. A repair or wait never borrows the working spinner. Coverage
+keeps the seat role and reads catalog names from the launch source account.
+`TeamEscalation` renders typed permission, escalation and progress-report
+payloads; `body` remains human prose for CLI readers. Reports retain their
+captured outputs and attempt records. The normal demo evidence gate is unchanged.
+`TeamProgress` supplies the app status, registered wait timing, attempt verdicts,
+wrap-up plan, cost bill and residual ownership. Cost values are the same usage
+projection as `team show cost`; member duration and team wall time are separate.
+`workspace_inspected.reason` identifies restart notes without guessing from a
+seat's prose. Residual reassignment appends `residual_item` through the shared
+service/IPC/CLI and replaces only that item's owner in the reducer. All three
+terminal summaries and paused message queuing remain ledger-derived.
 
 ## Real-model follow-up decisions, 2026-11-18
 

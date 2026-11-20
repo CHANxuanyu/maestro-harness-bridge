@@ -1,22 +1,38 @@
 import { Check, CircleDot, Circle } from 'lucide-react';
 import { useMemo } from 'react';
-import { latestAgentTaskList } from '../utils/agentTaskList';
+import { latestAgentTaskList, agentTaskListEmptyState } from '../utils/agentTaskList';
 import type { LogEntry, Theme } from '../types';
 import { useT } from '../i18n';
 
-export function TasksPanel({ logs, theme }: { logs: LogEntry[]; theme: Theme }) {
+export function TasksPanel({
+	logs,
+	theme,
+	provider,
+	model,
+}: {
+	logs: LogEntry[];
+	theme: Theme;
+	provider?: string;
+	model?: string;
+}) {
 	const t = useT();
 	const list = useMemo(() => latestAgentTaskList(logs), [logs]);
-	if (!list?.tasks.length)
+	if (!list?.tasks.length) {
+		const empty = agentTaskListEmptyState(t, provider, model);
 		return (
 			<div
 				data-testid="tasks-empty"
 				className="h-full flex items-center justify-center px-4 text-center text-sm"
 				style={{ color: theme.colors.textDim }}
 			>
-				{t('workflows.newShell.tasksEmpty')}
+				<div>
+					<p>{empty.title}</p>
+					{'\n'}
+					<p className="mt-2">{empty.explanation}</p>
+				</div>
 			</div>
 		);
+	}
 	return (
 		<div className="py-3 text-sm" data-testid="tasks-panel">
 			<p

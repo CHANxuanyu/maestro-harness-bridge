@@ -11,7 +11,7 @@ function teamM3Scene(options, prompt, configDir) {
 	const kind = prompt.match(/Turn: ([a-z_]+)\./)?.[1];
 	const saved = path.join(configDir, 'm3-repair.json');
 	if (prompt.startsWith('Your ') && prompt.includes('Resubmit only'))
-		return { answer: fs.readFileSync(saved, 'utf8') };
+		return { answer: fs.readFileSync(saved, 'utf8'), completionGate: options.repairGate };
 	const countsFile = path.join(configDir, 'm3-counts.json');
 	const counts = fs.existsSync(countsFile) ? JSON.parse(fs.readFileSync(countsFile, 'utf8')) : {};
 	const key = `${seat}:${kind}`;
@@ -47,6 +47,8 @@ function teamM3Scene(options, prompt, configDir) {
 			waiting: { reason: 'Normal external work', waitFor: 'Synthetic build status' },
 		});
 	const scene = teamM2Scene({ ...options, seat, scenario: 'm3' }, prompt, configDir);
+	if (seat === 'pm' && options.seat !== 'pm' && kind === 'review')
+		scene.completionGate = options.takeoverGate;
 	if (options.scenario === 'no-progress' && seat === 'dev' && kind === 'work') {
 		const revision = Math.min(counts[key], 3);
 		scene.writes['result.html'] = `<html><body>Broken revision ${revision}</body></html>`;

@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT, type ModelPickerSelection } from '../../shared/modelCatalog';
 import { persistTabStarred } from '../utils/starredSessions';
 import { getWindowContext } from '../contexts/WindowContext';
 import { spawnPtyForTab } from '../services/terminalSpawn';
@@ -309,6 +310,12 @@ export interface TabStoreActions {
 	 * Set per-tab effort/reasoning override. Pass undefined to clear and fall back to session/agent default.
 	 */
 	setTabEffort: (tabId: string, effort: string | undefined) => void;
+	setTabModelEffort: (
+		sessionId: string,
+		tabId: string,
+		scope: string,
+		selection: ModelPickerSelection
+	) => void;
 
 	// === AI tab transcript scroll position ===
 
@@ -736,6 +743,22 @@ export const useTabStore = create<TabStore>()((set) => ({
 		const tab = session.aiTabs.find((t) => t.id === tabId);
 		if (!tab) return;
 		updateAiTab(tabId, { showThinking: nextThinkingMode(tab.showThinking) });
+	},
+
+	setTabModelEffort: (sessionId, tabId, scope, selection) => {
+		updateSessionWith(sessionId, (session) => ({
+			...session,
+			aiTabs: session.aiTabs.map((tab) =>
+				tab.id === tabId
+					? {
+							...tab,
+							customModel: selection.model || NATIVE_MODEL_DEFAULT,
+							customEffort: selection.effort || NATIVE_MODEL_DEFAULT,
+							modelEfforts: { ...tab.modelEfforts, [scope]: selection.remembered },
+						}
+					: tab
+			),
+		}));
 	},
 
 	setTabModel: (tabId, model) => {

@@ -38,6 +38,19 @@ function message(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage 
 }
 
 describe('transcriptMessagesToLogEntries', () => {
+	it('preserves measured turn completion when native history upgrades the user entry', () => {
+		const visible = transcriptMessagesToLogEntries([message()]);
+		visible[0].turnCompletion = {
+			status: 'completed',
+			timestamp: 2000,
+			delivery: { files: 1, additions: 2, deletions: 0, paths: ['file.txt'] },
+		};
+		const loaded = transcriptMessagesToLogEntries([message()]);
+		loaded[0].turnModel = 'gpt-5.3-codex';
+		const result = reconcileTranscriptEntries(loaded, visible);
+		expect(result.logs[0].turnModel).toBe('gpt-5.3-codex');
+		expect(result.logs[0].turnCompletion).toEqual(visible[0].turnCompletion);
+	});
 	it('retains native call IDs separately from the message ID for on-demand results', () => {
 		const entries = transcriptMessagesToLogEntries([
 			message({

@@ -2,7 +2,11 @@ export { buildProjectHistoryScopes } from './nativeConversationMatch';
 import type { ArchivedConversation } from '../../shared/conversationArchive';
 import type { ConversationOrigin, Group, Session } from '../types';
 import { conversationExpanded, findConversationParent } from '../../shared/conversationChildren';
-import type { ProjectHistoryConversation } from '../../shared/projectHistory';
+import {
+	projectHistoryScopeFor,
+	type ProjectHistoryConversation,
+} from '../../shared/projectHistory';
+import type { TeamConfig } from '../../shared/team/types';
 import { getBasename } from '../../shared/formatters';
 import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { DEEPSEEK_PRESET, sessionProviderId } from '../../shared/agentPresets';
@@ -14,6 +18,8 @@ import {
 	runnerAccount,
 	sessionHost,
 	sessionProjectKey,
+	projectPathKey,
+	buildProjectHistoryScopes,
 } from './nativeConversationMatch';
 
 /** Rows a project shows before "Show more", and how many each press adds. */
@@ -37,6 +43,7 @@ export interface SidebarConversation {
 	/** Native provider conversation id, when one exists. */
 	nativeSessionId: string | null;
 	title: string;
+	worktree?: ProjectHistoryConversation['worktree'];
 	/**
 	 * The provider's own name for the conversation, when it differs from
 	 * `title` (a tab the user or an older import named something else). Kept as
@@ -66,6 +73,7 @@ export interface SidebarAgentChoice {
 }
 
 export interface SidebarProject {
+	teams?: TeamConfig[];
 	archivedConversations?: ArchivedConversation[];
 	key: string;
 	groupId?: string;
@@ -86,6 +94,7 @@ export interface SidebarProject {
 export { sessionProjectKey } from './nativeConversationMatch';
 
 interface ProjectSessionTreeOptions {
+	teams?: TeamConfig[];
 	newShell?: boolean;
 	archives?: ArchivedConversation[];
 	sessions: Session[];
@@ -168,6 +177,7 @@ function aliasFor(
  * row per native conversation. Nothing here copies or imports a transcript.
  */
 export function buildProjectSessionTree({
+	teams = [],
 	newShell = false,
 	archives = [],
 	sessions,
@@ -320,7 +330,9 @@ export function buildProjectSessionTree({
 			// rebuilds the row at the moment the first message lands, and later
 			// streamed chunks never touch the first message.
 			const name = tab.name && !isSessionIdLabel(tab.name, tab.agentSessionId) ? tab.name : '';
-			const title = name || recordTitle || conversationDisplayTitle(tab) || '';
+			const title = newShell
+				? conversationDisplayTitle(tab, true) || ''
+				: name || recordTitle || conversationDisplayTitle(tab) || '';
 			if (newShell) {
 				const source = tab.consultOrigin
 					? ownerById.get(tab.consultOrigin.sourceSessionId)
@@ -357,6 +369,15 @@ export function buildProjectSessionTree({
 				provider,
 				nativeSessionId: tab.agentSessionId ?? null,
 				title,
+				...(newShell && session.worktreeBranch
+					? {
+							worktree: record?.worktree ?? {
+								path: session.cwd,
+								branch: session.worktreeBranch,
+								name: getBasename(session.cwd),
+							},
+						}
+					: {}),
 				...aliasFor(title, record),
 				agentName: session.name,
 				projectPath: path,
@@ -377,22 +398,30 @@ export function buildProjectSessionTree({
 		const rows = rowsByProject.get(record.projectKey);
 		// A scope the window no longer has (agent removed mid-load) has nowhere to go.
 		if (!rows) continue;
+		// Read once: history records can be getters, and this loop runs over every
+		// native conversation of every project on each tree rebuild.
+		const nativeSessionId = record.nativeSessionId;
 		if (
 			archivedKeys.has(record.key) ||
 			(record.key.startsWith('local:') &&
-				archivedNative.has(JSON.stringify([record.ownerId, record.nativeSessionId])))
+				archivedNative.has(JSON.stringify([record.ownerId, nativeSessionId])))
 		)
 			archivedRows.add(`history:${record.key}`);
 		const owner = record.ownerId ? ownerById.get(record.ownerId) : undefined;
-		const title = historyTitle(record);
+		const title = newShell
+			? conversationDisplayTitle(
+					{ name: historyTitle(record), agentSessionId: nativeSessionId, logs: [] },
+					true
+				) || ''
+			: historyTitle(record);
 		rows.push({
 			key: `history:${record.key}`,
 			kind: 'history',
-			expanded: conversationExpanded(owner?.conversationTreeExpanded, null, record.nativeSessionId),
+			expanded: conversationExpanded(owner?.conversationTreeExpanded, null, nativeSessionId),
 			ownerId: owner ? owner.id : null,
 			tabId: null,
 			provider: historyProviderId(record, owner, sessions),
-			nativeSessionId: record.nativeSessionId,
+			nativeSessionId,
 			title,
 			...aliasFor(title, record),
 			agentName: owner?.name ?? '',
@@ -405,6 +434,40 @@ export function buildProjectSessionTree({
 			modifiedAt: record.modifiedAt,
 			history: record,
 		});
+	}
+
+	// A team owns a project even when no conversation has ever been opened here.
+	// Share host/path membership with native history, without creating a fake runner.
+	if (newShell && teams.length) {
+		const scopes = buildProjectHistoryScopes(sessions, groups);
+		for (const team of teams) {
+			const scope = projectHistoryScopeFor(scopes, {
+				projectPath: team.projectRoot,
+				sshRemoteId: team.sshRemoteId,
+			});
+			const key = scope?.projectKey ?? projectPathKey(team.projectRoot, team.sshRemoteId);
+			let project = projects.get(key);
+			if (!project) {
+				project = {
+					key,
+					name: getBasename(team.projectRoot) || team.projectRoot,
+					depth: 0,
+					collapsed: collapsed.has(key),
+					conversations: [],
+					totalCount: 0,
+					hiddenCount: 0,
+					agents: [],
+				};
+				projects.set(key, project);
+				scopes.push({
+					projectKey: key,
+					projectPath: team.projectRoot,
+					sshRemoteId: team.sshRemoteId,
+					ownerIds: [],
+				});
+			}
+			(project.teams ??= []).push(team);
+		}
 	}
 
 	// Resolve before filtering or paging so a closed source stays above its live
@@ -544,6 +607,8 @@ export function buildProjectSessionTree({
 	const filtering = !!query || unreadOnly || !!providerFilter;
 	return [...projects.values()]
 		.filter((project) => {
+			// Conversation filters and collapsed parent groups must not strand teams.
+			if (project.teams?.length) return true;
 			const group = project.groupId ? groupById.get(project.groupId) : undefined;
 			const parent =
 				groupsPlusEnabled && group?.parentGroupId ? groupById.get(group.parentGroupId) : undefined;

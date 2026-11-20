@@ -10,10 +10,64 @@ import { sidebarSessionEquality } from '../../../renderer/stores/sessionEquality
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import type { Group } from '../../../renderer/types';
+import { config as teamConfig } from '../../shared/team/fixtures';
 
 const project: Group = { id: 'project', name: 'Maestro', emoji: '📁', collapsed: false };
 
 describe('project conversation navigation', () => {
+	it('creates a path-backed project for teams without inventing a conversation or runner', () => {
+		const projects = buildProjectSessionTree({
+			newShell: true,
+			teams: [teamConfig],
+			sessions: [],
+			groups: [],
+		});
+		expect(projects).toEqual([
+			expect.objectContaining({
+				key: `path:local:${teamConfig.projectRoot}`,
+				teams: [teamConfig],
+				conversations: [],
+				agents: [],
+			}),
+		]);
+		expect(buildProjectSessionTree({ teams: [teamConfig], sessions: [], groups: [] })).toEqual([]);
+	});
+	it('reuses existing host-scoped project membership and keeps different hosts separate', () => {
+		const owner = createMockSession({ groupId: project.id, projectRoot: teamConfig.projectRoot });
+		const remote = { ...teamConfig, id: 'remote-team', sshRemoteId: 'host' };
+		const subdirectory = {
+			...teamConfig,
+			id: 'subdirectory-team',
+			projectRoot: `${teamConfig.projectRoot}/child`,
+		};
+		const projects = buildProjectSessionTree({
+			newShell: true,
+			teams: [teamConfig, remote, subdirectory],
+			sessions: [owner],
+			groups: [project],
+		});
+		expect(projects).toHaveLength(2);
+		expect(projects[0].teams).toEqual([teamConfig, subdirectory]);
+		expect(projects[1]).toMatchObject({
+			key: `path:host:${teamConfig.projectRoot}`,
+			teams: [remote],
+		});
+	});
+	it('keeps team projects reachable across conversation filters and path spelling aliases', () => {
+		const second = { ...teamConfig, id: 'second-team', projectRoot: `${teamConfig.projectRoot}/` };
+		const projects = buildProjectSessionTree({
+			newShell: true,
+			teams: [teamConfig, second],
+			sessions: [],
+			groups: [],
+			search: 'unrelated',
+			unreadOnly: true,
+			providerFilter: 'unknown',
+		});
+		expect(projects).toHaveLength(1);
+		expect(projects[0].teams).toEqual([teamConfig, second]);
+		expect(projects[0].collapsed).toBe(false);
+	});
 	it('puts conversations from different harnesses directly in the existing project', () => {
 		const codex = createMockSession({
 			id: 'codex-owner',
@@ -146,6 +200,26 @@ describe('project conversation navigation', () => {
 				...overrides,
 			};
 		}
+
+		it('uses the canonical open title even when history has a different fallback', () => {
+			const tab = createMockAITab({
+				id: 'tab',
+				name: null,
+				agentSessionId: NATIVE,
+				logs: [{ id: 'question', timestamp: 1, source: 'user', text: '# Fix `drafts` **today**' }],
+			});
+			const owner = createMockSession({
+				id: 'owner',
+				groupId: project.id,
+				toolType: 'codex',
+				aiTabs: [tab],
+			});
+			const options = { sessions: [owner], groups: [project], history: [record()] };
+			expect(
+				buildProjectSessionTree({ ...options, newShell: true })[0].conversations[0].title
+			).toBe('Fix drafts today');
+			expect(buildProjectSessionTree(options)[0].conversations[0].title).toBe('Refactor parser');
+		});
 
 		it.each(['busy', 'idle'] as const)(
 			'claims a %s consult record without a resumable binding',

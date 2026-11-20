@@ -1,15 +1,51 @@
 import { projectSettingsKey } from '../../../../../shared/projectSettings';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, render, screen } from '@testing-library/react';
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import { StdoutHandler } from '../../../../../main/process-manager/handlers/StdoutHandler';
+import { StderrHandler } from '../../../../../main/process-manager/handlers/StderrHandler';
+import { ExitHandler } from '../../../../../main/process-manager/handlers/ExitHandler';
+import { setupDataListener } from '../../../../../main/process-listeners/data-listener';
+import { setupErrorListener } from '../../../../../main/process-listeners/error-listener';
+import { setupExitListener } from '../../../../../main/process-listeners/exit-listener';
+import * as gitChanges from '../../../../../main/git-changes';
+import { DataBufferManager } from '../../../../../main/process-manager/handlers/DataBufferManager';
+import type { ManagedProcess } from '../../../../../main/process-manager/types';
+import { ClaudeOutputParser } from '../../../../../main/parsers/claude-output-parser';
+import { CodexOutputParser } from '../../../../../main/parsers/codex-output-parser';
+import { useAgentToolExecutionListener } from '../../../../../renderer/hooks/agent/internal/useAgentToolExecutionListener';
+import { useAgentErrorListener } from '../../../../../renderer/hooks/agent/internal/useAgentErrorListener';
+import { useAgentDataListener } from '../../../../../renderer/hooks/agent/internal/useAgentDataListener';
+import { useBatchedSessionUpdates } from '../../../../../renderer/hooks/session/useBatchedSessionUpdates';
+import { foldTurnActivity } from '../../../../../renderer/components/TerminalOutput/utils/foldTurnActivity';
+import { useDebouncedPersistence } from '../../../../../renderer/hooks/utils/useDebouncedPersistence';
+import { TurnDeliveryBar } from '../../../../../renderer/components/TerminalOutput/components/TurnDeliveryBar';
+import { TurnActivityFold } from '../../../../../renderer/components/TerminalOutput/components/TurnActivityFold';
+import { mockTheme } from '../../../../helpers/mockTheme';
+import { readableTextOn } from '../../../../../shared/colorContrast';
+import React from 'react';
+import { NotificationCenter } from '../../../../../renderer/components/NotificationCenter';
 import { useAgentExitListener } from '../../../../../renderer/hooks/agent/internal/useAgentExitListener';
 import { useSessionStore } from '../../../../../renderer/stores/sessionStore';
-import { useRetryStore } from '../../../../../renderer/stores/retryStore';
+import {
+	useRetryStore,
+	noteDispatch,
+	cancelRetry,
+} from '../../../../../renderer/stores/retryStore';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
 import { useNotificationStore } from '../../../../../renderer/stores/notificationStore';
 import { DEFAULT_BATCH_STATE } from '../../../../../renderer/hooks/batch/batchReducer';
-import type { BatchRunState } from '../../../../../renderer/types';
+import type { Session, BatchRunState } from '../../../../../renderer/types';
+import type { TurnDelivery } from '../../../../../shared/gitChangeTurns';
 import { createMockSession } from '../../../../helpers/mockSession';
 import { createMockAITab } from '../../../../helpers/mockTab';
+
+vi.mock('../../../../../main/ipc/handlers/groupChat', () => ({ groupChatEmitters: {} }));
+vi.mock('../../../../../main/utils/sentry', () => ({ captureMessage: vi.fn() }));
+vi.mock('../../../../../main/agents/capability-snapshot', () => ({
+	capabilitySnapshots: { markAuthRequired: vi.fn() },
+}));
 
 let mockIsWebDesktop = false;
 vi.mock('../../../../../renderer/utils/runtimeContext', () => ({
@@ -17,11 +53,23 @@ vi.mock('../../../../../renderer/utils/runtimeContext', () => ({
 }));
 
 let handler:
-	| ((sessionId: string, code: number, signal?: number, interrupted?: boolean) => Promise<void>)
+	| ((
+			sessionId: string,
+			code: number,
+			signal?: number,
+			interrupted?: boolean,
+			delivery?: TurnDelivery,
+			deliveryToken?: string
+	  ) => Promise<void>)
 	| undefined;
 const mockUnsubscribe = vi.fn();
 
 const mockProcess = {
+	onData: vi.fn().mockReturnValue(mockUnsubscribe),
+	onToolExecution: vi.fn().mockReturnValue(mockUnsubscribe),
+	onAgentError: vi.fn().mockReturnValue(mockUnsubscribe),
+	onAuthExpired: vi.fn().mockReturnValue(mockUnsubscribe),
+	onTurnDelivery: vi.fn().mockReturnValue(mockUnsubscribe),
 	onExit: vi.fn((h: any) => {
 		handler = h;
 		return mockUnsubscribe;
@@ -75,12 +123,16 @@ beforeEach(() => {
 	(window as any).maestro = {
 		...((window as any).maestro || {}),
 		process: mockProcess,
-		stats: { recordQuery: vi.fn().mockResolvedValue(undefined) },
+		stats: {
+			recordQuery: vi.fn().mockResolvedValue(undefined),
+			recordResilience: vi.fn().mockResolvedValue(undefined),
+		},
 		logger: { log: vi.fn() },
 	};
 });
 
 afterEach(async () => {
+	cancelRetry('sess-1', 'tab-1');
 	// Exit side effects are intentionally deferred; settle them before resetting stores.
 	await act(async () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -88,6 +140,573 @@ afterEach(async () => {
 });
 
 describe('useAgentExitListener', () => {
+	it.each(['hanging', 'throwing'] as const)(
+		'completes and drains a queued turn despite %s delivery capture, then settles Stop',
+		async (mode) => {
+			useSettingsStore.setState({ newShell: true });
+			const capture = vi.spyOn(gitChanges, 'finishGitTurn').mockImplementation(() => {
+				if (mode === 'throwing') throw new Error('capture failed');
+				return new Promise(() => {});
+			});
+			try {
+				const queued = {
+					id: 'next',
+					timestamp: 3,
+					tabId: 'tab-1',
+					type: 'message' as const,
+					text: 'next question',
+				};
+				useSessionStore.setState({
+					sessions: [
+						createMockSession({
+							id: 'sess-1',
+							activeTabId: 'tab-1',
+							state: 'busy',
+							busySource: 'ai',
+							executionQueue: [queued],
+							aiTabs: [
+								createMockAITab({
+									id: 'tab-1',
+									state: 'busy',
+									logs: [
+										{ id: 'user', source: 'user', timestamp: 1, text: 'first question' },
+										{ id: 'answer', source: 'stdout', timestamp: 2, text: 'QUEUE_READY' },
+									],
+								}),
+							],
+						}),
+					],
+				});
+				const dispatch = vi.fn().mockResolvedValue(undefined);
+				const deps = { ...makeDeps(), processQueuedItemRef: { current: dispatch } };
+				renderHook(() => useAgentExitListener(deps));
+				const emitter = new EventEmitter();
+				let completion: Promise<void> | undefined;
+				setupExitListener(
+					emitter as never,
+					{
+						powerManager: { removeBlockReason: vi.fn() },
+						patterns: {},
+						getWebServer: () => null,
+						logger: { warn: vi.fn(), debug: vi.fn() },
+						safeSend: (channel: string, ...args: Parameters<NonNullable<typeof handler>>) => {
+							if (channel === 'process:exit') completion = handler!(...args);
+						},
+					} as unknown as Parameters<typeof setupExitListener>[1]
+				);
+				await act(async () => {
+					emitter.emit('exit', 'sess-1-ai-tab-1', 0);
+					await completion;
+					await new Promise((resolve) => setTimeout(resolve, 0));
+				});
+				const session = useSessionStore.getState().sessions[0];
+				expect(session.executionQueue).toEqual([]);
+				expect(session.aiTabs[0].logs.map((entry) => entry.text)).toEqual([
+					'first question',
+					'QUEUE_READY',
+					'next question',
+				]);
+				expect(session.aiTabs[0].logs[0].turnCompletion).toMatchObject({ status: 'completed' });
+				expect(dispatch).toHaveBeenCalledExactlyOnceWith('sess-1', queued);
+				await act(async () => {
+					emitter.emit('exit', 'sess-1-ai-tab-1', 0, undefined, true);
+					await completion;
+				});
+				const stopped = useSessionStore.getState().sessions[0];
+				expect(stopped.aiTabs[0].state).toBe('idle');
+				expect(stopped.aiTabs[0].logs.at(-1)?.turnCompletion).toMatchObject({ status: 'canceled' });
+				expect(dispatch).toHaveBeenCalledTimes(1);
+			} finally {
+				capture.mockRestore();
+			}
+		}
+	);
+
+	it('attaches a fast delivery after the exit probe and never to the next queued turn', async () => {
+		useSettingsStore.setState({ newShell: true });
+		let release!: (value: []) => void;
+		mockProcess.getActiveProcesses.mockReturnValueOnce(
+			new Promise((resolve) => {
+				release = resolve;
+			})
+		);
+		useSessionStore.setState({
+			sessions: [
+				createMockSession({
+					id: 'sess-1',
+					activeTabId: 'tab-1',
+					state: 'busy',
+					busySource: 'ai',
+					executionQueue: [
+						{ id: 'next', timestamp: 3, tabId: 'tab-1', type: 'message', text: 'next question' },
+					],
+					aiTabs: [
+						createMockAITab({
+							id: 'tab-1',
+							state: 'busy',
+							logs: [
+								{ id: 'user', source: 'user', timestamp: 1, text: 'first question' },
+								{ id: 'answer', source: 'stdout', timestamp: 2, text: 'first answer' },
+							],
+						}),
+					],
+				}),
+			],
+		});
+		const dispatch = vi.fn().mockResolvedValue(undefined);
+		renderHook(() =>
+			useAgentExitListener({ ...makeDeps(), processQueuedItemRef: { current: dispatch } })
+		);
+		const delivery = { files: 2, additions: 3, deletions: 1, paths: ['a', 'b'] };
+		await act(async () => {
+			const exiting = handler!('sess-1-ai-tab-1', 0, undefined, false, undefined, 'turn-token');
+			const arriving = mockProcess.onTurnDelivery.mock.calls[0][0](
+				'sess-1-ai-tab-1',
+				'turn-token',
+				delivery
+			);
+			release([]);
+			await Promise.all([exiting, arriving]);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+		const logs = useSessionStore.getState().sessions[0].aiTabs[0].logs;
+		expect(logs[0].turnCompletion?.delivery).toEqual(delivery);
+		expect(logs.at(-1)?.turnCompletion).toBeUndefined();
+		expect(dispatch).toHaveBeenCalledTimes(1);
+	});
+
+	it.each(['claude-code', 'codex'] as const)(
+		'attaches late %s delivery only to its finished turn and restores the persisted bar',
+		async (toolType) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+			const queued = {
+				id: 'next',
+				timestamp: 3,
+				tabId: 'tab-1',
+				type: 'message' as const,
+				text: 'next question',
+			};
+			useSessionStore.setState({
+				sessionsReadOk: true,
+				sessions: [
+					createMockSession({
+						id: 'sess-1',
+						toolType,
+						activeTabId: 'tab-1',
+						state: 'busy',
+						busySource: 'ai',
+						executionQueue: [queued],
+						aiTabs: [
+							createMockAITab({
+								id: 'tab-1',
+								state: 'busy',
+								logs: [
+									{ id: 'user', source: 'user', timestamp: 1, text: 'write two files' },
+									{ id: 'answer', source: 'stdout', timestamp: 2, text: 'DELIVERY_DONE' },
+								],
+							}),
+							createMockAITab({
+								id: 'other-tab',
+								logs: [
+									{
+										id: 'other-user',
+										source: 'user',
+										timestamp: 1,
+										text: 'another tab',
+										turnCompletion: {
+											status: 'completed',
+											timestamp: 2,
+											deliveryToken: 'turn-token',
+										},
+									},
+								],
+							}),
+						],
+					}),
+				],
+			});
+			const saveAll = vi.fn().mockResolvedValue(true);
+			const saveMany = vi.fn().mockResolvedValue(true);
+			window.maestro.sessions = { ...window.maestro.sessions, setAll: saveAll, setMany: saveMany };
+			const dispatch = vi.fn().mockResolvedValue(undefined);
+			const deps = { ...makeDeps(), processQueuedItemRef: { current: dispatch } };
+			const loaded = { current: true };
+			const hook = renderHook(() => {
+				useAgentExitListener(deps);
+				return useDebouncedPersistence(loaded);
+			});
+			function Delivery() {
+				const session = useSessionStore((state) => state.sessions[0]);
+				const tab = session.aiTabs[0];
+				const folded = foldTurnActivity(tab.logs, {
+					newShell: true,
+					keepLastTurnOpen: tab.state === 'busy',
+				});
+				return (
+					<>
+						{[...folded.deliveryByHostId].map(([id, footer]) => (
+							<TurnDeliveryBar
+								key={id}
+								{...footer}
+								sessionId={session.id}
+								tabId={tab.id}
+								textColor={mockTheme.colors.textMain}
+							/>
+						))}
+					</>
+				);
+			}
+			render(<Delivery />);
+			await act(async () => {
+				await handler!('sess-1-ai-tab-1', 0, undefined, false, undefined, 'turn-token');
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			});
+			expect(dispatch).toHaveBeenCalledExactlyOnceWith('sess-1', queued);
+			await act(async () => {
+				await handler!('sess-1-ai-tab-1', 0, undefined, false, undefined, 'next-token');
+				await hook.result.current.flushNow();
+			});
+			const finished = useSessionStore.getState().sessions[0];
+			expect(finished.aiTabs[0].state).toBe('idle');
+			expect(finished.executionQueue).toEqual([]);
+			expect(finished.aiTabs[0].logs[1].text).toBe('DELIVERY_DONE');
+			expect(finished.aiTabs[0].logs.at(-1)?.turnCompletion?.deliveryToken).toBe('next-token');
+			expect(screen.queryByTestId('turn-delivery')).not.toBeInTheDocument();
+			expect(saveAll).toHaveBeenCalledTimes(1);
+			const delivery = {
+				files: 2,
+				additions: 3,
+				deletions: 0,
+				paths: ['activity-a.txt', 'activity-b.txt'],
+			};
+			const arrive = mockProcess.onTurnDelivery.mock.calls[0][0];
+			await act(async () => {
+				await arrive('sess-1-ai-tab-1', 'unknown-token', delivery);
+			});
+			expect(useSessionStore.getState().sessions[0].aiTabs[0].logs).toEqual(
+				finished.aiTabs[0].logs
+			);
+			await act(async () => {
+				await arrive('sess-1-ai-tab-1', 'turn-token', delivery);
+			});
+			const session = useSessionStore.getState().sessions[0];
+			expect(session.aiTabs[0].logs[0].turnCompletion?.delivery).toEqual(delivery);
+			expect(session.aiTabs[0].logs.slice(1)).toEqual(finished.aiTabs[0].logs.slice(1));
+			expect(session.aiTabs[1]).toBe(finished.aiTabs[1]);
+			expect(screen.getAllByTestId('turn-delivery')).toHaveLength(1);
+			expect(screen.getByTestId('turn-delivery')).toHaveAttribute('data-turn-id', 'user');
+			expect(screen.getByTestId('turn-delivery')).toHaveTextContent('Changed 2 files · +3 -0');
+			await act(async () => {
+				await hook.result.current.flushNow();
+			});
+			expect(saveMany).toHaveBeenCalledTimes(1);
+			const saved = JSON.parse(JSON.stringify(saveMany.mock.calls[0][0])) as Session[];
+			expect(saved[0].aiTabs[0].logs[0].turnCompletion?.delivery).toEqual(delivery);
+			hook.unmount();
+			act(() => useSessionStore.setState({ sessions: saved }));
+			expect(screen.getAllByTestId('turn-delivery')).toHaveLength(1);
+			expect(screen.getByTestId('turn-delivery')).toHaveAttribute('data-turn-id', 'user');
+			expect(screen.getByTestId('turn-delivery')).toHaveTextContent('Changed 2 files · +3 -0');
+		}
+	);
+
+	it.each([
+		{ provider: 'claude', reuseCall: true, retry: false },
+		{ provider: 'codex', reuseCall: true, retry: false },
+		{ provider: 'claude', reuseCall: false, retry: false },
+		{ provider: 'codex', reuseCall: false, retry: false },
+		{ provider: 'claude', reuseCall: true, retry: true },
+		{ provider: 'codex', reuseCall: true, retry: true },
+		{ provider: 'claude', reuseCall: false, retry: true },
+		{ provider: 'codex', reuseCall: false, retry: true },
+	])(
+		'shows the fixture terminal error for $provider, reused call=$reuseCall, retry=$retry',
+		async ({ provider, reuseCall, retry }) => {
+			useSettingsStore.setState({ newShell: true, uiLanguage: 'en' });
+			const toolType = provider === 'claude' ? 'claude-code' : 'codex';
+			const reason = 'Activity fixture connection failed';
+			const tab = createMockAITab({
+				id: 'tab-1',
+				state: 'busy',
+				logs: [
+					{ id: 'previous-user', timestamp: 1, source: 'user', text: 'Previous turn' },
+					{
+						id: 'tool-activity-4',
+						timestamp: 2,
+						source: 'tool',
+						text: 'Bash',
+						metadata: { toolState: { status: 'failed' } },
+					},
+					{ id: 'previous-answer', timestamp: 3, source: 'stdout', text: 'ACTIVITY_DONE' },
+					{
+						id: 'error-user',
+						timestamp: 4,
+						source: 'user',
+						text: 'End this synthetic turn with an error',
+					},
+				],
+			});
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({
+						id: 'sess-1',
+						toolType,
+						state: 'busy',
+						activeTabId: tab.id,
+						aiTabs: [tab],
+					}),
+				],
+			});
+			// The native composer snapshots the dispatched prompt, enabling retry.
+			// Without this the error listener takes its modal fallback instead.
+			if (retry) {
+				noteDispatch(
+					'sess-1',
+					{
+						id: 'error-user',
+						tabId: tab.id,
+						type: 'message',
+						text: tab.logs.at(-1)!.text,
+						timestamp: 4,
+					},
+					{ conductorProfile: '', customAICommands: [], speckitCommands: [], openspecCommands: [] }
+				);
+			}
+			const deps = makeDeps();
+			renderHook(() => {
+				const liveDeps = { ...deps, batchedUpdater: useBatchedSessionUpdates() };
+				useAgentDataListener(liveDeps);
+				useAgentToolExecutionListener();
+				useAgentErrorListener({ ...liveDeps, pauseBatchOnErrorRef: { current: null } });
+				useAgentExitListener(liveDeps);
+			});
+			const processId = 'sess-1-ai-tab-1';
+			const emitter = new EventEmitter();
+			const safeSend = vi.fn((channel: string, ...args: unknown[]) => {
+				if (channel === 'process:data') mockProcess.onData.mock.calls[0][0](...args);
+				if (channel === 'agent:error') mockProcess.onAgentError.mock.calls[0][0](...args);
+				return true;
+			});
+			const { flushPendingData } = setupDataListener(
+				emitter as never,
+				{
+					safeSend,
+					getWebServer: () => null,
+					outputBuffer: {},
+					outputParser: {},
+					debugLog: vi.fn(),
+					patterns: {},
+				} as unknown as Parameters<typeof setupDataListener>[1]
+			);
+			setupErrorListener(
+				emitter as never,
+				{ safeSend, logger: { info: vi.fn(), warn: vi.fn() } } as Parameters<
+					typeof setupErrorListener
+				>[1],
+				flushPendingData
+			);
+			emitter.on('tool-execution', mockProcess.onToolExecution.mock.calls[0][0]);
+			const proc = {
+				sessionId: processId,
+				toolType,
+				cwd: '.',
+				pid: 1,
+				startTime: Date.now(),
+				isStreamJsonMode: true,
+				isBatchMode: true,
+				isTerminal: false,
+				jsonBuffer: '',
+				stdoutBuffer: '',
+				streamedText: '',
+				resultEmitted: false,
+				errorEmitted: false,
+				outputParser: provider === 'claude' ? new ClaudeOutputParser() : new CodexOutputParser(),
+			} as ManagedProcess;
+			const processes = new Map([[processId, proc]]);
+			const bufferManager = new DataBufferManager(processes, emitter);
+			const stdout = new StdoutHandler({ processes, emitter, bufferManager });
+			const stderr = new StderrHandler({ processes, emitter });
+			const exit = new ExitHandler({ processes, emitter, bufferManager, stdoutHandler: stdout });
+			let rendererExit: Promise<void> | undefined;
+			emitter.on('exit', (...args: Parameters<NonNullable<typeof handler>>) => {
+				rendererExit = handler!(...args);
+			});
+			const { createTurn } = createRequire(import.meta.url)(
+				'../../../../../../e2e/fixtures/native/protocol.cjs'
+			);
+			await act(async () => {
+				const turn = createTurn({
+					provider,
+					configDir: '.',
+					cwd: '.',
+					persist: false,
+					prompt: tab.logs.at(-1)!.text,
+					emit: (event: Record<string, unknown>) =>
+						stdout.handleData(processId, `${JSON.stringify(event)}\n`),
+				});
+				// native-activity-bar uses the first turn's activity-4 again in its
+				// error scene. Also cover a provider assigning a fresh native call id.
+				const tool = {
+					id: reuseCall ? 'activity-4' : 'error-tool',
+					command: 'printf step-4',
+					output: 'Exit code: 1\nExpected regression failure',
+				};
+				turn.startTool(tool);
+				turn.finishTool(tool, 'failed');
+				turn.fail(reason);
+				// cli.cjs writes the same reason to stderr and exits 1, without Stop.
+				stderr.handleData(processId, `${reason}\n`);
+				await exit.handleExit(processId, 1);
+				await rendererExit;
+				const forwardedError = safeSend.mock.calls.find(
+					([channel]) => channel === 'agent:error'
+				)?.[2];
+				expect(forwardedError).toMatchObject({
+					type: 'network_error',
+					sessionId: processId,
+					raw:
+						provider === 'codex' ? { errorLine: reason } : { stderr: `${reason}\n`, exitCode: 1 },
+				});
+			});
+			const finished = useSessionStore.getState().sessions[0].aiTabs[0];
+			expect(finished.state).toBe('idle');
+			expect
+				.soft(finished.logs.find((log) => log.id === 'error-user')?.turnCompletion)
+				.toMatchObject({ status: 'error', reason });
+			expect(finished.logs.filter((log) => log.source === 'tool')).toHaveLength(reuseCall ? 1 : 2);
+			const folded = foldTurnActivity(finished.logs, { newShell: true, keepLastTurnOpen: false });
+			const [hostId, activity] = [...folded.activityByHostId].at(-1)!;
+			expect(activity).toMatchObject({ turnId: 'error-user', status: 'error', reason });
+			expect(activity.failingStepId).toBe(reuseCall ? undefined : 'tool-error-tool');
+			// Preserve the actionable error or retry card even if no tool belongs to
+			// this turn. Never borrow the previous turn's failed step for its summary.
+			const errorCard = finished.logs.find((log) =>
+				retry ? !!log.retryOutageId : log.source === 'error'
+			);
+			expect(!!useRetryStore.getState().retries['sess-1:tab-1']).toBe(retry);
+			expect(errorCard).toBeDefined();
+			expect(folded.logs).toContain(errorCard);
+			const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+			render(
+				<TurnActivityFold
+					hostId={hostId}
+					index={0}
+					activity={activity}
+					open
+					newShell
+					onToggle={vi.fn()}
+					theme={mockTheme}
+					secondaryTextColor={mockTheme.colors.textDim}
+				>
+					{activity.entries.map((entry) => (
+						<div key={entry.id} data-log-id={entry.id}>
+							{entry.text}
+						</div>
+					))}
+				</TurnActivityFold>
+			);
+			expect(
+				screen.getByTestId('activity-collapsed').querySelector('[data-tool-status="error"]')
+			).toHaveTextContent(reason);
+			const expectedSummary = reuseCall ? `Failed: ${reason}` : `· 1 step · ${reason}`;
+			if (!reuseCall)
+				expect(screen.getByTestId('activity-collapsed').textContent).toMatch(/^Worked for /);
+			expect(screen.getByTestId('activity-collapsed')).toHaveTextContent(expectedSummary);
+			expect(screen.getByText(reuseCall ? `Failed: ${reason}` : reason)).toHaveStyle({
+				color: readableTextOn(mockTheme.colors.error, [mockTheme.colors.bgMain]),
+			});
+			if (!reuseCall) {
+				expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+				expect((scroll.mock.instances.at(-1) as HTMLElement).dataset.logId).toBe('tool-error-tool');
+			}
+			scroll.mockRestore();
+		}
+	);
+
+	it.each([
+		{
+			name: 'earlier turn',
+			errorTime: 1,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 1,
+			newShell: true,
+			stopped: false,
+			status: 'error',
+			reason: 'exit code 1',
+		},
+		{
+			name: 'another process',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-2',
+			code: 1,
+			newShell: true,
+			stopped: false,
+			status: 'error',
+			reason: 'exit code 1',
+		},
+		{
+			name: 'provider failure with exit 0',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 0,
+			newShell: true,
+			stopped: false,
+			status: 'error',
+			reason: 'Provider disconnected',
+		},
+		{
+			name: 'explicit stop',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 1,
+			newShell: true,
+			stopped: true,
+			status: 'canceled',
+			reason: undefined,
+		},
+		{
+			name: 'classic shell',
+			errorTime: 20,
+			errorSession: 'sess-1-ai-tab-1',
+			code: 1,
+			newShell: false,
+			stopped: false,
+			status: undefined,
+			reason: undefined,
+		},
+	])(
+		'scopes the retained provider error: $name',
+		async ({ errorTime, errorSession, code, newShell, stopped, status, reason }) => {
+			useSettingsStore.setState({ newShell, uiLanguage: 'en' });
+			const tab = createMockAITab({
+				id: 'tab-1',
+				state: 'busy',
+				logs: [{ id: 'user', timestamp: 10, source: 'user', text: 'Try this turn' }],
+				agentError: {
+					type: 'network_error',
+					message: 'Connection failed',
+					timestamp: errorTime,
+					sessionId: errorSession,
+					agentId: 'codex',
+					recoverable: true,
+					raw: { errorLine: 'Provider disconnected' },
+				},
+			});
+			useSessionStore.setState({
+				sessions: [
+					createMockSession({ id: 'sess-1', activeTabId: tab.id, aiTabs: [tab], state: 'busy' }),
+				],
+			});
+			renderHook(() => useAgentExitListener(makeDeps()));
+			await act(async () => {
+				await handler!('sess-1-ai-tab-1', code, undefined, stopped);
+			});
+			const completion = useSessionStore.getState().sessions[0].aiTabs[0].logs[0].turnCompletion;
+			if (newShell) expect(completion).toMatchObject({ status, reason });
+			else expect(completion).toBeUndefined();
+		}
+	);
+
 	it.each([false, true])(
 		'keeps other conversations and queues intact after a scoped Stop, own queue %s',
 		async (ownQueue) => {
@@ -784,9 +1403,17 @@ describe('useAgentExitListener', () => {
 
 		expect(deps.activeHiddenToolRef.current.has('sess-1:tab-1')).toBe(false);
 	});
-	it.each([true, false])(
-		'records a final completion with viewing=%s while retaining popup/audio defaults',
-		async (viewing) => {
+	it.each([
+		[false, true, true],
+		[false, false, true],
+		[true, true, true],
+		[true, false, true],
+		[true, true, false],
+	])(
+		'records completion with newShell=%s viewing=%s windowFocused=%s',
+		async (newShell, viewing, focused) => {
+			const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(focused);
+			useSettingsStore.setState({ newShell });
 			const tab = createMockAITab({
 				id: 'tab-1',
 				state: 'busy',
@@ -795,11 +1422,17 @@ describe('useAgentExitListener', () => {
 			});
 			useSessionStore.setState({
 				sessions: [
-					createMockSession({ id: 'sess-1', aiTabs: [tab], activeTabId: 'tab-1', state: 'busy' }),
+					createMockSession({
+						id: 'sess-1',
+						aiTabs: [tab, createMockAITab({ id: 'other' })],
+						activeTabId: viewing ? 'tab-1' : 'other',
+						state: 'busy',
+					}),
 				],
-				activeSessionId: viewing ? 'sess-1' : '',
+				activeSessionId: 'sess-1',
 			});
 			const speak = vi.fn().mockResolvedValue(undefined);
+			render(<NotificationCenter theme={mockTheme} />);
 			window.maestro.notification.speak = speak;
 			useNotificationStore.getState().setAudioFeedback(true, 'say');
 			renderHook(() => useAgentExitListener(makeDeps()));
@@ -808,8 +1441,13 @@ describe('useAgentExitListener', () => {
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			});
 			expect(useNotificationStore.getState().history).toHaveLength(1);
+			expect(useNotificationStore.getState().history[0].read).toBe(newShell && viewing && focused);
+			expect(!!screen.queryByTestId('notification-center-badge')).toBe(
+				!(newShell && viewing && focused)
+			);
 			expect(useNotificationStore.getState().toasts).toHaveLength(viewing ? 0 : 1);
 			expect(speak).toHaveBeenCalledTimes(1);
+			focus.mockRestore();
 		}
 	);
 

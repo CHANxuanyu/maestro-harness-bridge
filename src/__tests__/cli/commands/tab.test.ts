@@ -363,6 +363,17 @@ describe('tab commands', () => {
 			},
 		});
 	});
+	it('opens Changes filtered to one delivery turn through the acknowledged patch', async () => {
+		const payload = mockTab({ success: true });
+		await tabPanel('tab-aaaa', 'changes-turns', { turn: 'user-turn' });
+		expect(payload()).toMatchObject({
+			configPatch: {
+				tabId: 'tab-aaaa',
+				newShellPanelAction: 'changes-turns',
+				newShellChangesTurnId: 'user-turn',
+			},
+		});
+	});
 	it.each(['web', 'web-reload', 'web-external'])(
 		'defers active %s targeting to the live renderer instead of the persisted selection',
 		async (action) => {
@@ -606,6 +617,22 @@ describe('tab commands', () => {
 		const getEnter = mockTab({ success: true });
 		await tabEnterToSend('tab-cccc', false, {});
 		expect(getEnter().configPatch).toEqual({ tabId: 'tab-cccc', enterToSend: false });
+	});
+
+	it('native-default remains distinct from inheriting Maestro overrides', async () => {
+		const { NATIVE_MODEL_DEFAULT } = await import('../../../shared/modelCatalog');
+		const getModel = mockTab({ success: true });
+		await tabModel('tab-cccc', 'native-default', {});
+		expect(getModel().configPatch).toEqual({
+			tabId: 'tab-cccc',
+			customModel: NATIVE_MODEL_DEFAULT,
+		});
+		const getEffort = mockTab({ success: true });
+		await tabEffort('tab-cccc', 'native-default', {});
+		expect(getEffort().configPatch).toEqual({
+			tabId: 'tab-cccc',
+			customEffort: NATIVE_MODEL_DEFAULT,
+		});
 	});
 
 	it('clearing an override sends null so the renderer drops the field', async () => {

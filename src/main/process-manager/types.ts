@@ -21,6 +21,7 @@ export interface SdkProcessController {
  * Configuration for spawning a new process
  */
 export interface ProcessConfig {
+	newShellActivity?: boolean;
 	codexAppServer?: CodexAppServerSettings;
 	nativeCommandScopeKey?: string;
 	sessionId: string;
@@ -94,6 +95,7 @@ export interface ProcessConfig {
  * Internal representation of a managed process
  */
 export interface ManagedProcess {
+	newShellActivity?: boolean;
 	codexAppServerController?: CodexAppServerSession;
 	nativeCommandScopeKey?: string;
 	toolOutputSource?: Omit<

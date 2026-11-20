@@ -1,3 +1,4 @@
+import { TeamView } from './components/Team/TeamView';
 import { useNativeCommands } from './hooks/input/useNativeCommands';
 import { openProjectTarget } from './services/openProject';
 import React, {
@@ -3318,6 +3319,7 @@ function MaestroConsoleInner() {
 						</div>
 					) : null
 				}
+				teamView={<TeamView theme={theme} />}
 				groupChatView={
 					!logViewerOpen &&
 					activeGroupChatId &&

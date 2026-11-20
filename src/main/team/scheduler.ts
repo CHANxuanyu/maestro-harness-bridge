@@ -2,6 +2,7 @@ import { checkCommandBoundary, type CheckBoundary } from '../../shared/checkRun'
 import { createHash, randomUUID } from 'crypto';
 import { DURATION_MS } from '../../shared/duration';
 import { isValidAgentId } from '../../shared/agentIds';
+import { getAgentDisplayName } from '../../shared/agentMetadata';
 import { decideNext, judgeAttempts, NO_PROGRESS_LIMIT } from '../../shared/progressRules';
 import {
 	isOpenTeamIssue,
@@ -31,6 +32,7 @@ import { teamStatus } from '../../shared/team/status';
 import {
 	SEAT_ROLES,
 	type CreateTeamInput,
+	type Criterion,
 	type LedgerEvent,
 	type M1TurnKind,
 	type ReportTurnKind,
@@ -45,6 +47,7 @@ import {
 	type TeamConfig,
 	type TeamEvent,
 	type TeamState,
+	type TeamSeatTranscript,
 	type QueuedTeamMessage,
 } from '../../shared/team/types';
 import type { FollowUpFire } from '../../shared/followUp';
@@ -88,6 +91,7 @@ export interface TeamSchedulerDependencies {
 		seat: SeatRole,
 		model?: SeatModel
 	): Pick<SeatTurnRequest, 'customEnv' | 'customPath' | 'customArgs'>;
+	seatAccountDir?(config: TeamConfig, seat: SeatRole, model?: SeatModel): string | undefined;
 	quota?(config: TeamConfig, source: SeatRole, model: SeatModel): TeamQuotaSample | undefined;
 	now?: () => number;
 	onError(error: unknown): void;
@@ -159,6 +163,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: `permission:${action}`,
 				boundary: 'permission',
 				title: `Authorize ${action} for this team`,
+				payload: { type: 'permission', action, detail, branch: `team/${id}`, touchesMain: false },
 				body: `${detail} This action is outside the team's current ${action} authorization. Keeping the work locally preserves the result but does not complete this action. Recommend authorizing this action class if the target and cost are intended. Dependent work waits for this decision.`,
 				options: [
 					{
@@ -168,9 +173,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						recommended: true,
 					},
 					{
-						id: 'stop',
-						label: 'Stop and preserve the task branch',
-						cost: 'The task remains incomplete.',
+						id: 'decline',
+						label: 'Decline this action',
+						cost: 'Keep the task branch and ledger; this action will not run.',
 					},
 				],
 			});
@@ -374,27 +379,32 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					unavailabilityId: entry.id,
 				});
 			}
-			if (entry.login && !restored)
+			if (entry.login && !restored) {
+				const accountDir = deps.seatAccountDir?.(state.config!, source, model);
 				await card(id, {
 					id: `login:${entry.id}`,
 					seat: entry.seat,
 					boundary: 'login',
-					title: `Restore ${model.tool} login for ${entry.seat}`,
-					body: JSON.stringify({
+					title: `Restore ${getAgentDisplayName(model.tool)} login`,
+					body: `${getAgentDisplayName(model.tool)} login has expired for ${accountDir ?? `the account configured for ${source}`}. Only the owner can restore this account.`,
+					payload: {
+						type: 'escalation',
+						cause: 'login',
 						stuck: entry.detail,
 						accountSeat: source,
 						provider: model.tool,
+						accountDir,
 						paths: [
 							'The expired credential cannot authenticate. Retrying the same login cannot repair it.',
 							'Authorized substitutes are evaluated separately; other seats continue.',
 						],
 						recommendation:
 							'Sign in to the account configured for this seat, then confirm that login is restored.',
-					}),
+					},
 					options: [
 						{
 							id: 'login',
-							label: `I restored the ${model.tool} login for ${source}`,
+							label: `I restored the ${getAgentDisplayName(model.tool)} login`,
 							cost: 'Owner completes provider login.',
 							recommended: true,
 						},
@@ -405,6 +415,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						},
 					],
 				});
+			}
 		}
 		state = await stateFor(id);
 		for (const seat of SEAT_ROLES) {
@@ -509,7 +520,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					boundary: recovery.decision.boundaries[0],
 					boundaries: recovery.decision.boundaries,
 					title: `${seat} recovery would cross the deadline`,
-					body: JSON.stringify({
+					body: 'The original model is unavailable and waiting for recovery would cross the deadline.',
+					payload: {
+						type: 'escalation',
+						cause: 'availability',
 						stuck: entry.detail,
 						paths: [
 							'The original model is unavailable; another call would repeat the refusal.',
@@ -522,7 +536,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 							recovery.decision.options.find((option) => option.recommended)?.plan ??
 							recovery.decision.options[0].plan,
 						waiting: 'Independent work continues; the deadline is unchanged.',
-					}),
+					},
 					extension: { hours: extensionHours },
 					options: recovery.decision.options.map((c) => ({
 						id: c.key!,
@@ -978,8 +992,10 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						kind: 'workspace_inspected',
 						actor: 'app',
 						dispatchId: dispatch.dispatchId,
+						reason: recover ? 'restart' : 'recovery',
 						...inspection,
-						id: `${dispatch.dispatchId}:inspection`,
+						// A retry can already have an inspection receipt when the app crashes.
+						id: `${dispatch.dispatchId}:${recover ? 'restart-inspection' : 'inspection'}`,
 					})
 				);
 				request.prompt += `\nWorkspace inspection (preserve completed external effects): ${JSON.stringify(inspection)}`;
@@ -1317,11 +1333,8 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: cardId,
 				boundary: 'permission',
 				title: 'Approve this check once',
-				body: JSON.stringify({
-					command,
-					boundary,
-					scope: 'Only this invocation; the team workspace grant is unchanged.',
-				}),
+				body: `Run ${command} once. Only this invocation is authorized; the team workspace grant is unchanged.`,
+				payload: { type: 'check-permission', command, boundary },
 				options: [
 					{ id: 'once', label: 'Allow only this invocation' },
 					{ id: 'omit', label: 'Do not add this check', recommended: true },
@@ -1550,7 +1563,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			)
 		)
 			return;
-		const lastDevFailure = state.turns.findLast((t) => t.seat === 'dev' && t.finished && !t.report);
+		// A repair's accepted report is attached to its original turn, but its receipt is valid.
+		const lastDevFailure = state.turns.findLast(
+			(t) =>
+				t.seat === 'dev' && t.finished && !t.report && !t.finished.report && !t.finished.canceled
+		);
 		if (lastDevFailure?.finished && now() - lastDevFailure.finished.at < TEAM_FAILURE_COOLDOWN_MS)
 			return;
 		if (!(await seatAvailable(id, state, 'dev'))) return;
@@ -1590,13 +1607,17 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						boundary: decision.boundaries[0],
 						boundaries: decision.boundaries,
 						title: `A boundary blocks ${problemId}`,
-						body: JSON.stringify({
+						body: 'The remaining paths for this problem require an owner decision.',
+						payload: {
+							type: 'escalation',
+							cause: 'problem',
+							problemId,
 							stuck: failing,
 							paths: progress.attempts,
 							recommendation:
 								decision.options.find((o) => o.recommended)?.plan ?? decision.options[0].plan,
 							waiting: 'This problem waits; independent work continues.',
-						}),
+						},
 						options: [
 							...decision.options.slice(0, 3).map((c, index) => ({
 								id: c.key ?? `path:${index}`,
@@ -1956,7 +1977,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				discussionId: discussion.id,
 				standardChange: change,
 				referenceVotes: referenceVotes(discussion, state),
-				body: JSON.stringify({
+				body: change
+					? `${change.reason} The existing standard and check result remain unchanged until you decide.`
+					: `${proposal.proposal} This step is irreversible or changes a commitment and needs your decision.`,
+				payload: {
+					type: 'discussion',
 					before: criterion,
 					after: change?.criterion,
 					currentCheckResult: criterion?.reason,
@@ -1965,12 +1990,27 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					proposal: proposal.proposal,
 					responses,
 					boundary: 'The next step is irreversible or changes a commitment.',
-				}),
-				budgetNote: `${state.usage.turns}/${state.config!.turnBudget} turns used`,
+				},
+				budgetNote: `${state.usage.budgetTurns}/${state.config!.turnBudget} turns used`,
 				options: change
 					? [
-							{ id: 'approve', label: 'Approve this standard change', cost: change.reason },
-							{ id: 'keep', label: 'Keep the existing standard', recommended: true },
+							{
+								id: 'approve',
+								label: 'Approve this standard change',
+								cost:
+									change.change === 'remove'
+										? 'This criterion will no longer block acceptance. Its wording and check results remain in the change history.'
+										: 'The proposed wording replaces the existing acceptance standard. Fresh evidence must verify the new standard; the old wording and check results remain in the change history.',
+							},
+							{
+								id: 'keep',
+								label: 'Keep the existing standard',
+								recommended: true,
+								cost:
+									criterion?.status === 'fail'
+										? 'The existing standard stays in force. The check keeps failing and blocks acceptance until fixed and verified.'
+										: 'The existing standard stays in force and must be met for acceptance.',
+							},
 						]
 					: (proposal.options ?? [
 							{ id: 'approve', label: 'Approve the proposed commitment', cost: proposal.proposal },
@@ -1986,7 +2026,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			decider,
 			insist || responses.some((r) => r.requestedResult === 'insist'),
 			decider === 'app'
-				? `Facts remain determined by recorded evidence. ${JSON.stringify(state.checks.map((c) => ({ command: c.command, exitCode: c.exitCode })))}`
+				? `Facts remain determined by recorded evidence. ${state.checks.map((c) => `${c.command}: exit ${c.exitCode ?? 'unavailable'}`).join('; ')}`
 				: undefined
 		);
 		return true;
@@ -1998,8 +2038,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			id: cardId,
 			boundary: 'budget',
 			title: 'Incomplete progress report',
-			body: JSON.stringify({
-				label: 'This is a progress report, not a completion demo.',
+			body: 'This is a progress report, not a completion demo. The listed criteria still need evidence.',
+			payload: {
+				type: 'progress-report',
 				generatedBy: 'app',
 				output: state.outputs.at(-1),
 				missing: teamStatus(state, now()).criteria.missing,
@@ -2017,7 +2058,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				recommendation:
 					state.wrapUp?.summary ??
 					'Extend by 1 hour and 10 turns to address the listed gaps; this is an allowance, not a completion estimate.',
-			}),
+			},
 			extension: { hours: 1, turns: 10 },
 			options: [
 				{
@@ -2233,12 +2274,15 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					id: `external:${request.id}`,
 					boundary: 'permission',
 					title: `Owner decision required: ${request.action}`,
-					body: JSON.stringify({
+					body: 'This external action is reserved for the owner.',
+					payload: {
+						type: 'escalation',
+						cause: 'external',
 						stuck: request.detail,
 						paths: ['The team grant covers task-branch pushes and draft PRs only.'],
 						recommendation:
 							'Keep the task branch; the owner performs this external action separately.',
-					}),
+					},
 					options: [
 						{
 							id: 'decline',
@@ -2256,6 +2300,22 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				continue;
 			}
 			const action = request.action;
+			if (
+				state.cardAnswers.some(
+					(answer) => answer.cardId === `permission:${action}` && answer.optionId === 'decline'
+				)
+			) {
+				await append(id, {
+					kind: 'action_receipt',
+					actor: 'app',
+					action,
+					key: request.id,
+					outcome: 'failed',
+					detail: 'Owner declined this action; branch and ledger kept.',
+					id: `${request.id}:result`,
+				});
+				continue;
+			}
 			if (
 				!(await permission(
 					id,
@@ -2330,14 +2390,17 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 								id: `action-login:${request.id}`,
 								boundary: 'login',
 								title: 'Restore GitHub CLI login for the project remote',
-								body: JSON.stringify({
+								body: 'GitHub CLI authentication failed for the project remote.',
+								payload: {
+									type: 'escalation',
+									cause: 'publication-login',
 									stuck: String(error),
 									paths: [
 										'The authorized publication failed. Repeating it without restoring GitHub credentials cannot succeed.',
 									],
 									recommendation:
 										'Run gh auth login for the project remote host, then request publication again.',
-								}),
+								},
 								options: [
 									{
 										id: 'decline',
@@ -2397,11 +2460,14 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				seat,
 				boundary: 'model',
 				title: `Authorize ${model.tool} ${model.model ?? 'default'} for ${seat}`,
-				body: JSON.stringify({
+				body: 'This model is outside the current team authorization.',
+				payload: {
+					type: 'escalation',
+					cause: 'model',
 					stuck: 'This model is not in the team authorization.',
 					paths: ['Existing team models remain available under the current grant.'],
 					recommendation: 'Approve only if the new model and its usage cost are intended.',
-				}),
+				},
 				seatChange: { seat, model, substitute },
 				options: [
 					{
@@ -3050,15 +3116,30 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				id: `baseline:${last('respond')!.dispatchId}:v${state.brief.version}`,
 				boundary: 'baseline',
 				title: 'Confirm the baseline',
-				body: JSON.stringify({
+				body: [
+					'Review this scope and its criteria before implementation starts.',
+					state.brief.checks.length
+						? 'The checks were dry-run in the task workspace under your authorization; they can start, and failures before implementation are expected.'
+						: '',
+					response.type === 'respond' ? response.askOwner : '',
+				]
+					.filter(Boolean)
+					.join(' '),
+				payload: {
+					type: 'baseline',
 					brief: state.brief,
 					question: response.type === 'respond' ? response.askOwner : undefined,
+					challengeRound: {
+						round: challengeRound.round,
+						criteria: challengeRound.criteria,
+						diff: challengeRound.diff,
+					},
 					challenges: state.challenges.filter((c) => c.seq > challengeRound.ownerEpoch),
 					responses: state.briefResponses.filter((r) => r.seq > challengeRound.ownerEpoch),
 					discussions: state.decisions,
 					trials: state.checks.filter((c) => c.batchId === batchId),
 					diff: baselineDiff(state.briefs.at(-2) ?? null, state.brief),
-				}),
+				},
 				options: [
 					{ id: 'confirm', label: 'Confirm this scope and criteria', recommended: true },
 					{ id: 'return', label: 'Return with specific changes' },
@@ -3229,7 +3310,9 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					id: `acceptance:${last('demo')!.dispatchId}`,
 					boundary: 'acceptance',
 					title: 'Accept the demonstrated result',
-					body: JSON.stringify({
+					body: 'All confirmed criteria have evidence and product review passed. Accept the result or request specific changes.',
+					payload: {
+						type: 'acceptance',
 						output: state.outputs.at(-1),
 						before: state.outputs.at(-2),
 						demo: state.demos.at(-1),
@@ -3238,7 +3321,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						contested: state.decisions.filter((d) => d.contested),
 						suggestions: state.suggestions,
 						evidenceChanges: state.checks.filter((c) => c.dilution?.length),
-					}),
+					},
 					options: [
 						{ id: 'accept', label: 'Accept the result', recommended: true },
 						{ id: 'changes', label: 'Request specific changes' },
@@ -3737,21 +3820,38 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					: (state.briefs.at(-2) ?? null);
 			return baselineDiff(before, current);
 		},
-		baselineEdit: (id: string, criterionId: string, text: string) =>
+		baselineEdit: (
+			id: string,
+			criterionId: string,
+			text: string,
+			fields: Partial<Pick<Criterion, 'proof' | 'how'>> = {}
+		) =>
 			queue.enqueue(id, async () => {
 				const state = await stateFor(id);
 				if (state.terminal || !text?.trim())
 					throw new Error('An active team and nonempty criterion text are required');
+				if (
+					(fields.proof !== undefined && !['app', 'qa', 'pm'].includes(fields.proof)) ||
+					(fields.how !== undefined && typeof fields.how !== 'string')
+				)
+					throw new Error('Invalid criterion proof fields');
 				const current = state.baseline.brief ?? state.brief;
 				const criterion = current?.criteria.find((c) => c.id === criterionId);
 				if (!current || !criterion) throw new Error('Unknown criterion');
+				const edited = {
+					...criterion,
+					text,
+					proof: fields.proof ?? criterion.proof,
+					how: fields.how ?? criterion.how,
+					byOwner: true,
+				};
 				if (state.baseline.brief) {
 					await applyStandardChange(
 						id,
 						{
 							criterionId,
 							change: 'modify',
-							criterion: { ...criterion, text, byOwner: true },
+							criterion: edited,
 							reason: 'Owner edited the criterion',
 						},
 						'owner',
@@ -3761,9 +3861,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					const brief = {
 						...current,
 						version: current.version + 1,
-						criteria: current.criteria.map((c) =>
-							c.id === criterionId ? { ...c, text, byOwner: true } : c
-						),
+						criteria: current.criteria.map((c) => (c.id === criterionId ? edited : c)),
 					};
 					await append(id, {
 						kind: 'baseline_edited',
@@ -3839,6 +3937,20 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		pause: (id: string) => control(id, 'paused'),
 		resume: (id: string) => control(id, 'resumed'),
 		stop: (id: string) => control(id, 'stopped'),
+		assignResidual: (id: string, itemId: string, owner: string | null) =>
+			queue.enqueue(id, async () => {
+				const state = await stateFor(id);
+				const item = state.residualItems.find((entry) => entry.itemId === itemId);
+				if (state.terminal !== 'gaps' || !item || (owner !== null && typeof owner !== 'string'))
+					throw new Error('Choose an existing residual item on a team accepted with gaps');
+				await append(id, {
+					kind: 'residual_item',
+					actor: 'owner',
+					itemId,
+					text: item.text,
+					owner: owner?.trim() || null,
+				});
+			}),
 		seatSet: (id: string, seat: SeatRole, model: SeatModel) =>
 			queue.enqueue(id, () => setSeat(id, seat, model)),
 		seatSub: (id: string, seat: SeatRole, model?: SeatModel, wait = false) =>
@@ -3881,7 +3993,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			);
 			return JSON.stringify({ ...data, prompts }, null, '\t');
 		},
-		async seatTranscript(id: string, seat: SeatRole) {
+		async seatTranscript(id: string, seat: SeatRole): Promise<TeamSeatTranscript | null> {
 			if (!SEAT_ROLES.includes(seat)) throw new Error('Invalid seat');
 			const data = await this.get(id);
 			if (!data) return null;
@@ -3891,6 +4003,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						provider: binding.model.tool,
 						nativeSessionId: binding.nativeSessionId,
 						cwd: binding.workspace,
+						configDir: deps.seatAccountDir?.(
+							data.config,
+							binding.configSource ?? seat,
+							binding.model
+						),
 					}
 				: null;
 		},

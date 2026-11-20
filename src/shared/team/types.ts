@@ -43,6 +43,14 @@ export interface SeatConfig extends SeatModel {
 	substitute?: SeatModel;
 }
 
+/** Native read locator, including the account used by the dispatched seat. */
+export interface TeamSeatTranscript {
+	provider: AgentId;
+	nativeSessionId?: string;
+	cwd: string;
+	configDir?: string;
+}
+
 /** One-time authorization chosen at team creation (PRD 6.3). All four default to true. */
 export interface TeamAuthorizations {
 	/** Run check commands in the task workspaces. */
@@ -241,6 +249,81 @@ export interface OwnerCard {
 	title: string;
 	/** Where it is stuck and why the remaining paths need the owner. */
 	body: string;
+	/** Structured checkpoint data stays separate from owner-facing prose. */
+	payload?:
+		| {
+				type: 'baseline';
+				brief: Brief;
+				question?: string | null;
+				trials: TeamEvent<'check_run'>[];
+				diff?: BaselineDiff;
+				/** Frozen history for this owner-authored challenge cycle. */
+				challenges?: TeamEvent<'challenge_submitted'>[];
+				responses?: TeamEvent<'brief_response'>[];
+				discussions?: TeamEvent<'discussion_closed'>[];
+				challengeRound?: { round: number; criteria: string[]; diff?: BaselineDiff };
+		  }
+		| {
+				type: 'discussion';
+				before?: Criterion;
+				after?: Criterion;
+				currentCheckResult?: string;
+				failingNow: boolean;
+				positions: TeamEvent<'position'>[];
+				proposal: string;
+				responses: TeamEvent<'response'>[];
+				/** Human explanation of the commitment that needs an owner decision. */
+				boundary?: string;
+		  }
+		| {
+				type: 'escalation';
+				cause: 'login' | 'availability' | 'problem' | 'external' | 'publication-login' | 'model';
+				stuck?: string | string[];
+				paths: string[] | ProgressState['attempts'];
+				recommendation: string;
+				waiting?: string;
+				accountSeat?: SeatRole;
+				/** Host-resolved account directory, never credential contents. */
+				accountDir?: string;
+				provider?: string;
+				problemId?: string;
+		  }
+		| {
+				type: 'permission';
+				action: keyof TeamAuthorizations;
+				detail: string;
+				branch: string;
+				touchesMain: false;
+		  }
+		| { type: 'check-permission'; command: string; boundary: CheckBoundary }
+		| {
+				type: 'acceptance';
+				output?: TeamEvent<'output_captured'>;
+				before?: TeamEvent<'output_captured'>;
+				demo?: TeamEvent<'demo'>;
+				evidence: TeamStatusView['criteria'];
+				changes: TeamEvent<'standard_change'>[];
+				contested: TeamEvent<'discussion_closed'>[];
+				suggestions: string[];
+				evidenceChanges: TeamEvent<'check_run'>[];
+		  }
+		| {
+				type: 'progress-report';
+				generatedBy?: 'app';
+				output?: TeamEvent<'output_captured'>;
+				work?: TeamState['workItems'];
+				issues?: TeamState['issues'];
+				tried?: Record<string, TeamState['problems'][string]['progress']['attempts']>;
+				faults?: { seat: SeatRole; fault: TeamSeatState['lastFault'] }[];
+				recommendation?: string;
+				missing: { id: string; text: string; status: string; reason: string }[];
+				/** Locations the app itself could not resolve: an app fault, not a team problem. */
+				appObservations?: (TeamEvent<'output_observation'> | TeamEvent<'app_observation'>)[];
+				changes: TeamEvent<'standard_change'>[];
+				contested: TeamEvent<'discussion_closed'>[];
+				suggestions: string[];
+				evidenceChanges: TeamEvent<'check_run'>[];
+		  };
 	options: CardOption[];
 	/** Budget used when raised, for escalations. */
 	budgetNote?: string;
@@ -295,6 +378,7 @@ export type LedgerEvent = EventBase &
 		| { kind: 'model_recovered'; unavailabilityId: string }
 		| {
 				kind: 'workspace_inspected';
+				reason?: 'restart' | 'recovery';
 				dispatchId: string;
 				revision: string;
 				status: string;
@@ -898,6 +982,9 @@ export interface TeamProblem {
 
 export interface TeamStatistics {
 	ownerDecisions: number;
+	ownerMessages: number;
+	wakes: number;
+	substitutions: number;
 	discussions: number;
 	rejections: number;
 	retros: number;

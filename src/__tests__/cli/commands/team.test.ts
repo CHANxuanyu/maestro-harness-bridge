@@ -28,6 +28,13 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('team CLI parity', () => {
+	it('assigns residual follow-up owners through the same IPC as the UI', async () => {
+		await teamCommand('residual', ['assign', 'gap'], { owner: 'Alex', json: true });
+		expect(sendSimpleCommand).toHaveBeenLastCalledWith(
+			{ type: 'bridge.invoke', channel: 'team:assignResidual', args: [config.id, 'gap', 'Alex'] },
+			'bridge.response'
+		);
+	});
 	it.each([false, true])(
 		'prints the exact prompt as text or a JSON string (json: %s)',
 		async (json) => {
@@ -235,6 +242,11 @@ describe('team CLI parity', () => {
 			['baseline', 'edit', 'A1', '--text', 'Two complete words'],
 			'team:baselineEdit',
 			['A1', 'Two complete words'],
+		],
+		[
+			['baseline', 'edit', 'A1', '--text', 'New text', '--proof', 'qa', '--how', 'Inspect samples'],
+			'team:baselineEdit',
+			['A1', 'New text', { proof: 'qa', how: 'Inspect samples' }],
 		],
 		[['baseline', 'diff'], 'team:baselineDiff', []],
 		[

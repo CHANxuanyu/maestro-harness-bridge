@@ -1,5 +1,75 @@
 # Canonical Utilities - Full Rationale
 
+**New-shell team renderer**
+
+`teamClient()` in `src/renderer/services/teamClient.ts` is the sole typed access
+to the real `window.maestro.team` preload contract, deriving wire types rather
+than redeclaring them. Absence disables creation and
+does not substitute a demonstration ledger. `useTeamStore` in
+`src/renderer/stores/teamStore.ts` subscribes before `list` / `get`, merges
+snapshot and incremental events by identity, and calls the shared `reduceLedger`.
+Each team retains its reduced reference until its ledger changes; commands wait
+for recorded events instead of fabricating acceptance, delivery or evidence.
+Connection lifetime is reference counted, late reads are discarded after
+disconnect, and one clock supplies deadline status to `useTeamStatus`.
+
+`buildProjectSessionTree()` in `src/renderer/utils/projectSessionTree.ts` assigns
+teams with the existing `projectHistoryScopeFor()` host/path membership. A team
+without an existing project contributes a normal project row using
+`projectPathKey()` in `src/renderer/utils/nativeConversationMatch.ts`, shared
+with conversation runners. Do not invent a runner or a separate team sidebar:
+the shell must mount its project sidebar even with zero conversations, and
+conversation filters must retain these projects. Terminal teams stay listed.
+The top-level new-conversation action remains present without a runner and
+opens the selected local team's project through the existing `openProject()`.
+
+`deriveTeamFeed()` in `src/renderer/components/Team/deriveTeamFeed.ts` groups
+events into chronological phase folds only. `OwnerCard` is shared across
+boundaries, takes unresolved cards from `state.openCards`, puts recommended
+choices first, and never offers a bare continue. Baseline edit/diff/return call
+the real backend handlers and preserve historical versions. `presentTeamOwnerCard()`
+in the client adapter separates legacy JSON checkpoint bodies from human text;
+new baseline cards carry readable `body` and structured `payload` separately.
+`presentTeamRecovery()` and `presentTeamWait()` in the same adapter map app
+recovery instructions and wait metadata into localized owner-facing copy. The
+feed, status strip and Progress tab share this projection; member-authored
+rationale stays content, while known application prose and workspace prefixes
+pass through `presentTeamText()`. Do not print recovery `how` or quota sampling
+reasons directly, and do not infer status by parsing member prose.
+Fixed baseline/acceptance checkpoints have no visible boundary label;
+escalations show it once, while retaining `data-boundary` attributes.
+Application `job:` / `job-retry:` follow-ups are bookkeeping, not feed messages.
+`TeamSummary` renders once from `state.terminal`, outside phase folds: the
+scheduler can end with `accepted` or `stopped` without a separate `terminal`
+event. It uses canonical replay statistics rather than counting rendered cards.
+`TeamModelCatalogProvider` shares account-scoped catalogs across seat tags on
+each surface using `useConversationModelCatalog()`. Historical tags keep their
+event model and use catalog display names, including hidden catalog entries;
+missing entries fall back to IDs. `modelEffortLevelName()` in
+`src/shared/modelCatalog.ts` shares vendor level vocabulary with the picker.
+`TeamPrimitives.tsx`
+owns theme mapping, seat tags, folds and criteria presentation for these surfaces.
+`TeamMemberView` uses `seatTranscript` plus `agentSessions.read` with
+`readOnly: true`, the locator's resolved `configDir`, and the existing
+`SessionMessagesView`; never add a team-specific
+transcript parser. `TeamOutput` shows ledger artifacts through existing image
+and Markdown components, using workspace-relative labels while retaining the
+original paths for reads. The team surface is not a modal; only setup and member
+views register Escape behavior. Team changes use `ChangesPanel.readOnlyScope`, sharing
+the Git reads and diff view while omitting write and review controls.
+The live demo renders the backend's acceptance boundary itself; its open
+acceptance card enables the demo action rather than blocking it or adding a
+second generic acceptance card. Other unresolved boundaries still block accept.
+
+`TeamDiscussion`, `TeamBaseline`, `TeamReview` and `TeamDecisions` in `src/renderer/components/Team/` project M2 records without another reducer. `teamPathLabel()` and `teamEvidenceLabel()` in `TeamPrimitives.tsx` resolve workspace-relative captions and evidence references. The M2 backend and UI scenarios share `prepareNativeTeamM2()` in `e2e/fixtures/native-team-m2.ts`; `nativeTeamScene()` keeps message-handling turns separate from the M1 scripted turn sequence.
+
+`prepareNativeTeam()` in `e2e/fixtures/native-team.ts` owns the synthetic three-seat
+scripts, isolated accounts, ledger reads and release gates shared by
+`e2e/native-team.spec.ts` and `e2e/native-team-ui.spec.ts`. The former tests CLI
+decisions and recovery; the latter creates externally with no open project,
+then uses real UI controls for both owner decisions and the composer. See
+[test commands and screenshot capture](TEST-PATTERNS.md#synthetic-team-acceptance).
+
 **Team chat shared layer**
 
 M3 recovery uses `sameTeamModel()`, `teamModelUnavailable()` and
@@ -171,7 +241,9 @@ also invent domain events. This avoids double-counting the subsequent recorded
 actions. App-generated verdict events may carry `actor: 'app'`; member-authored
 ones must have the appropriate actor. To count one owner decision that has both
 a `card_answered` and a semantic event, propagate `cardId` to that semantic
-event. Recovery statistics count explicit `member_recovered` events; bindings
+event. Owner messages count logical message IDs regardless of delivery; wake-ups
+count distinct dispatched wake turns, and substitutions count takeover events.
+Recovery statistics count explicit `member_recovered` events; bindings
 describe where and under which model a seat runs. Additions in `standard_change`
 carry a complete `criterion`, including its proof method. All attempts and the
 review loop use `judgeAttempts()` and `decideNext()` in `src/shared/progressRules.ts`.
@@ -186,6 +258,10 @@ replay itself never reads the clock. Time formatting uses `src/shared/duration.t
 and token/cost formatting uses `src/shared/formatters.ts`. Prompts omit transcripts
 and private workspace bindings, isolate challenges, bound recent attempt details,
 and include all standard changes and contested decisions in the demo slice.
+
+- **New-shell model picker:** `ModelEffortPicker` in `src/renderer/components/ModelEffortPicker.tsx` owns the single pill, anchored layer, model-specific efforts, keyboard navigation and quota readout. Its `policy` is `conversation` or `team-seat`; team policy is applied before restoring remembered levels, including when the vendor default itself is Ultra. The composer adapter uses `useConversationModelCatalog()` in `src/renderer/hooks/agent/useAgentModelEffortOptions.ts` to warm the main-process cache once on mount and recheck file fingerprints on open, never on streaming renders. `tabStore.setTabModelEffort()` writes both overrides and `AITab.modelEfforts` atomically, partitioned by the catalog's opaque `accountKey`. `NATIVE_MODEL_DEFAULT` in `src/shared/modelCatalog.ts` distinguishes following native CLI configuration from clearing an override to inherit Maestro configuration; both exec and Codex app-server omit that override, and transcript ingestion omits the marker instead of presenting it as a known model. Keep `resolveModelEffort()` as the display override ladder. The classic shell's empty/inherited values retain their existing meaning. Do not copy the picker for team seats or add a second effort-memory store.
+
+- **Provider model catalogs and picker state:** `createModelCatalogService()` in `src/main/agents/model-catalog.ts` reads the effective account via `resolveAgentAccountDir()` and provider profiles. UI and `models <provider>` share `agents:getModelCatalog`; catalog and native config file revisions invalidate the bounded cache without a TTL. `parseCodexConfig()` in `src/main/agents/codex-config.ts` also serves the output parser, so an unrelated TOML table cannot become the default model. `visibleCatalogModels()`, `effortsForModel()`, `isEffortSupported()`, `resolveFollowDefault()`, `rememberEffortPerModel()`, `rememberedEffortForModel()` and `teamSeatEfforts()` in `src/shared/modelCatalog.ts` retain model-specific capabilities and defaults. Never union effort levels for an authoritative catalog, infer Claude legacy status from a model name, or delete Ultra from vendor data to implement team policy. `cachedModelCatalogQuota()` reads retained usage stores and `summarizeQuotaWindows()` projects remaining percentages, without sampling. Keep missing quota undefined, mark retained old samples stale, and never substitute local quota for an SSH account. See [the frontend contract](../round2/dev/model-catalog-api.md) for fallback, default provenance and limitations.
 
 - **On-demand native tool results:** `readToolOutputFile()` in `src/main/storage/native-tool-output.ts` runs `readNativeToolOutput()` in a disposable worker. Use `agentSessions:toolOutput` from UI and CLI so owner account selection, the 100 MiB native read cap, 2 MiB UTF-8 tail and read-only behavior stay shared. `codexToolOutputText()` in `src/shared/codexToolOutput.ts` is the native text decoder; the storage wrapper still applies `compactToolOutput()`. Claude uses `flattenToolResultContent(content, false)` only inside the bounded worker. Full text never enters session state. Do not add a second transcript parser or full-output persistence path.
 
@@ -693,3 +769,82 @@ Codex 的标准能力；咨询调用 `projectConversationFields(..., false)` 保
 - `conversationChildren()` in `src/renderer/services/conversationChildren.ts` is the owner-side UI/CLI read and write operation. `windows:conversationChildren` routes through the registry, verifies the responder and waits for persistence. Native history resolution uses `matchRecordForTab()`; never infer an account from the native ID alone.
 - `captureConversationSourceNativeId()` in `src/renderer/services/agentDelegation.ts` is the only backfill. The source window forwards the identity through the registry, and child windows run the same function without rebroadcasting, then save only owned changes. It also migrates disclosure from the tab key to the first native key without overwriting an explicit choice.
 - `findConversationParent()` includes handoffs. `conversationBranch()` excludes handoff edges for archive refusal only. Do not reuse archive membership as display membership: an unarchived handoff must remain visible when its source is archived.
+
+## Running-turn activity and delivery
+
+`foldTurnActivity()`, `summarizeTurnActivity()` and `turnActivityOutcome()` in
+`src/renderer/components/TerminalOutput/utils/foldTurnActivity.ts` own the new
+shell's running and completed activity projection. Keep classic callers opted
+out. `createTurnActivityFolder()` in the same module caches each turn by its
+user entry, boundary length, entry identities and presentation state. A streamed
+chunk rebuilds only the changed turn; historical edits and late completion or
+delivery updates invalidate their own turn. Pair it with
+`createAiResponseCollapse()` in `TerminalOutput/utils/collapseAiResponseLogs.ts`
+so unchanged merged replies retain their identity before folding. Both caches
+belong to the mounted conversation and use weak keys; never cache by ids or
+first/last entries alone. Finished activity arrays, plans and delivery objects
+stay stable for the row memos. The flat list still checks entry identities to
+detect corrections; this is not an append-only transcript assumption.
+Count only top-level tool calls, use `latestAgentTaskList()` for reported
+plans, and use `isProgressNoteEntry()` for public narration. A failed step does
+not determine the turn outcome. `toolExitCode()` in `renderer/utils/logEntries.ts`
+reads explicit provider codes without inventing one for generic failures.
+`turnFailureReason()` in the same file prefers the provider's plain diagnostic
+over a generic error-category message, while keeping raw JSON out of the summary.
+It strips ANSI, collapses whitespace and uses `truncateCommand()` to bound the
+reason to 240 characters. Apply it to persisted completion reasons too. Auto-retry
+stores a system marker instead of an error log, but retains the full `tab.agentError`;
+the exit listener must consider that error only when its process ID and timestamp
+belong to the current turn. A transcript error log is not the only failure source.
+Terminal errors retain a summary even without activity entries; an available
+failing step is located only within that turn, never borrowed from earlier work.
+With no steps, the localized summary reads `Failed: <reason>`; the duration and
+step-count wording is reserved for turns with steps. The reason stays on one line.
+Auth errors retain the localized sign-in explanation rather than exposing raw
+provider rejection text beside the existing sign-in card. The fold button's
+accessible name describes expanding activity; it must not impersonate that card's
+sign-in action. Keep the latest answer visible while the process is still busy:
+provider output and process exit are separate events, including gated fixtures.
+
+`beginGitTurn()`, `recordGitTurnTool()` and `finishGitTurn()` extend
+`src/main/git-changes.ts`. Start dirty-patch capture before spawn without awaiting
+it. Startup stdout does not invalidate capture. Buffer early `Write` and Codex
+add-only `file_change` starts; accept their baseline only if a bounded read-only
+probe still finds every target absent. Codex start/update normalization marks
+this extra evidence `newShellActivityOnly`; classic dispatch ignores it.
+Existing targets, edits, commands, tool
+completion and exit seal an unresolved baseline rather than count uncertain
+pre-existing content. Retain only write paths and statuses while running. Consume the boundary at exit,
+but forward exit immediately: optional measurement must never hold Stop or queue
+drain. Each capture has the canonical read-only Git timeout as a total budget.
+All SSH reads use `execGitReadOnly()` with the remote cwd. A new turn invalidates
+unfinished measurement so its writes cannot enter the preceding turn's totals.
+`process:turn-delivery` carries late totals with the token from `process:exit`;
+the renderer matches that token to the completed user entry, never the latest one.
+Failed or late capture leaves live delivery absent. `collectTurnWrites()` remains the write-evidence rule;
+`summarizeTurnDelivery()` in `src/shared/gitChangeTurns.ts` preserves unknown
+counts. Never substitute the current HEAD diff for this boundary comparison.
+Snapshots stay in main memory; only totals and paths enter `LogEntry.turnCompletion`
+on the user message. Native reconciliation preserves that renderer field.
+Historical turns without a retained boundary show unavailable line counts.
+HEAD changes, binary files, oversized content and ambiguous renames also retain
+unknown counts. Simultaneous external edits to the same attributed file cannot
+be separated by workspace boundaries.
+
+`TurnDeliveryBar` opens the existing Changes panel with `changesTurnId`;
+`tab panel <id> changes-turns --turn <turn-id>` is the CLI equivalent. That panel
+continues to show current file diffs, clearly separate from the frozen turn
+counts on the delivery bar. The optional check-result slot stays absent until
+F3 supplies evidence for the same turn.
+
+`agentTaskListEmptyState()` in `renderer/utils/agentTaskList.ts` shares the
+localized title and provider/model explanation between TasksPanel and the CLI.
+The CLI's `emptyText` joins those same two lines with a newline.
+
+## New shell conversation titles and elapsed counters
+
+`conversationDisplayTitle(tab, true)` in `src/renderer/utils/conversationTitle.ts` is the plain-text source for both the new shell header and open sidebar rows. It reuses `stripMarkdown`, keeps the distinguishing end of first-message titles, and never writes the cleaned title to native history. The classic default retains its existing formatting and excerpt limit. Open new-shell rows must not substitute a separately scanned history title over this source.
+
+`fitConversationTitle(title, peers, width, measure)` in that file fits both ends to the measured label track. If peer labels collide, it reveals the distinguishing prefix boundary instead. Pass `useElementWidth` and `measureTextWidth` with the resolved font, not a character count guessed from sidebar width. Keep the full canonical title in the tooltip. Identical full titles cannot become different without inventing a name.
+
+`steppedElapsedTime()` and `formatSteppedElapsed()` in `src/shared/duration.ts` define running counter boundaries: initial localized text below ten seconds, ten-second steps below one minute, then minute steps. `ElapsedTimeDisplay` schedules its next wake at that boundary and retains sleep-aware elapsed accounting and paused Auto Run behavior. It gates the new cadence by the shell setting; classic callers retain their formatter and second cadence. Do not add another per-second timer just to format its value less often.

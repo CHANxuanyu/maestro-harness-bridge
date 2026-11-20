@@ -36,15 +36,21 @@ import { flashCopiedToClipboard } from '../../utils/flashCopiedToClipboard';
 import { selectConversationNavigation, useSettingsStore } from '../../stores/settingsStore';
 import { useMessageGistStore } from '../../stores/messageGistStore';
 import { getClaudeTokenMode } from '../../../shared/claudeTokenMode';
-import { collapseAiResponseLogs } from './utils/collapseAiResponseLogs';
+import { collapseAiResponseLogs, createAiResponseCollapse } from './utils/collapseAiResponseLogs';
 import { computeTurnDurations } from './utils/turnDurations';
 import { computeTurnSettingChanges, isFeedReplyRow } from './utils/turnSettingChanges';
 import { readableTextOn } from '../../../shared/colorContrast';
 import { groupSubagentToolLogs } from './utils/groupSubagentToolLogs';
 import { foldNativeToolRuns } from './utils/foldNativeToolRuns';
-import { foldTurnActivity, type TurnActivity } from './utils/foldTurnActivity';
+import {
+	createTurnActivityFolder,
+	foldTurnActivity,
+	type TurnActivity,
+} from './utils/foldTurnActivity';
 import { feedProseStyles } from './utils/feedProseStyles';
 import { MemoizedTurnActivityFold, TurnActivityFold } from './components/TurnActivityFold';
+import { usePermissionRequestStore } from '../../stores/permissionRequestStore';
+import { TurnDeliveryBar } from './components/TurnDeliveryBar';
 import { TurnRunningStatus } from './components/TurnRunningStatus';
 import { trackShortcutUsage } from '../../utils/shortcutTracking';
 import { buildRenderedIdMap } from './utils/renderedLogIds';
@@ -297,7 +303,15 @@ export const TerminalOutput = memo(
 		// concern: tool events are always recorded (useAgentToolExecutionListener),
 		// so hiding here keeps toggling from mutating log storage (the flicker bug)
 		// and preserves running->completed correlation.
-		const collapsedAll = useMemo(() => collapseAiResponseLogs(activeLogs), [activeLogs]);
+		const transcriptProjection = useMemo(
+			() => ({ collapse: createAiResponseCollapse(), fold: createTurnActivityFolder() }),
+			[session.id, activeTab?.id]
+		);
+		const collapsedAll = useMemo(
+			() =>
+				newShell ? transcriptProjection.collapse(activeLogs) : collapseAiResponseLogs(activeLogs),
+			[activeLogs, newShell, transcriptProjection]
+		);
 		// Per-turn elapsed time for the badge under each reply's clock. Derived from
 		// the RAW logs (not the collapsed ones) because the tool and thinking entries
 		// that mark when the agent stopped working can be filtered out below.
@@ -341,15 +355,28 @@ export const TerminalOutput = memo(
 		const debouncedSearchQuery = useDebouncedValue(outputSearchQuery, 150);
 		// Conversation feed: each finished turn's process (tools, reasoning,
 		// progress notes, interim text) folds behind one "Worked for ..." row above
-		// its answer, as in Codex. The running turn stays open, and a search shows
-		// everything so every match is on the page.
+		// its answer. Classic keeps the running turn open and unfolds search results;
+		// the new shell keeps running activity inside the same fixed-height fold.
+		const awaitingApproval = usePermissionRequestStore(
+			(state) =>
+				newShell &&
+				state.queue[0]?.kind !== 'question' &&
+				state.queue[0]?.sessionId === `${session.id}-ai-${activeTab?.id}`
+		);
 		const turnLive = activeTab?.state === 'busy';
 		const turnFold = useMemo(
 			() =>
-				readingColumn && !debouncedSearchQuery
-					? foldTurnActivity(groupedLogs, { keepLastTurnOpen: turnLive })
-					: { logs: groupedLogs, activityByHostId: new Map<string, TurnActivity>() },
-			[groupedLogs, readingColumn, debouncedSearchQuery, turnLive]
+				readingColumn && (!debouncedSearchQuery || newShell)
+					? (newShell ? transcriptProjection.fold : foldTurnActivity)(groupedLogs, {
+							keepLastTurnOpen: turnLive,
+							newShell,
+						})
+					: {
+							logs: groupedLogs,
+							activityByHostId: new Map<string, TurnActivity>(),
+							deliveryByHostId: new Map(),
+						},
+			[groupedLogs, readingColumn, debouncedSearchQuery, turnLive, newShell, transcriptProjection]
 		);
 		const filteredLogs = turnFold.logs;
 		const turnActivityByHostId = turnFold.activityByHostId;
@@ -1125,6 +1152,13 @@ export const TerminalOutput = memo(
 						hostId={log.id}
 						index={index}
 						activity={activity}
+						newShell={newShell}
+						approvalHostId={
+							newShell && activity.running
+								? `turn-approval:${session.id}-ai-${activeTab?.id}`
+								: undefined
+						}
+						awaitingApproval={!!activity.running && awaitingApproval}
 						open={open}
 						onToggle={toggleExpanded}
 						theme={theme}
@@ -1137,13 +1171,31 @@ export const TerminalOutput = memo(
 			const rows: ReturnType<typeof createRow>[] = [];
 			return (start: number) => {
 				for (let i = start; i < rowLogs.length; i++) {
-					rows[i] ??= createRow(rowLogs[i], i);
+					if (!rows[i]) {
+						const footer = newShell ? turnFold.deliveryByHostId.get(rowLogs[i].id) : undefined;
+						rows[i] =
+							footer && activeTab ? (
+								<React.Fragment key={rowLogs[i].id}>
+									{createRow(rowLogs[i], i)}
+									<TurnDeliveryBar
+										{...footer}
+										sessionId={session.id}
+										tabId={activeTab.id}
+										textColor={feedSecondaryColor}
+									/>
+								</React.Fragment>
+							) : (
+								createRow(rowLogs[i], i)
+							);
+					}
 				}
 				return rows.slice(start);
 			};
 		}, [
 			newShell,
 			rowLogs,
+			turnFold.deliveryByHostId,
+			awaitingApproval,
 			rowStartIndex,
 			nativeToolOutputTarget,
 			originMessageId,
@@ -1446,7 +1498,7 @@ export const TerminalOutput = memo(
 						{/* The running turn, in one line after its newest output. The pill no
 						    longer describes the conversation on screen, and the composer's send
 						    key is its Stop. */}
-						{turnLive && (
+						{turnLive && !newShell && (
 							<TurnRunningStatus
 								theme={theme}
 								startTime={activeTab?.thinkingStartTime || session.thinkingStartTime}

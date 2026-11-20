@@ -1,3 +1,4 @@
+import type { TFunction } from '../i18n';
 import type { LogEntry } from '../types';
 
 /**
@@ -142,4 +143,16 @@ export function latestAgentTaskList(logs: readonly LogEntry[]): AgentTaskList | 
 			return null;
 	}
 	return null;
+}
+
+/** The Tasks panel and CLI share the same explanation for an absent native plan. */
+export function agentTaskListEmptyState(t: TFunction, provider?: string, model?: string) {
+	return {
+		title: t('workflows.newShell.tasksAbsent'),
+		explanation: t(
+			provider === 'claude-code' && /(?:sonnet|opus|haiku)[- ]5/.test(model ?? '')
+				? 'workflows.newShell.tasksClaude5'
+				: 'workflows.newShell.tasksEmpty'
+		),
+	};
 }

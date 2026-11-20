@@ -138,6 +138,52 @@ function sendJsonLine(handler: StdoutHandler, sessionId: string, obj: Record<str
 	handler.handleData(sessionId, JSON.stringify(obj) + '\n');
 }
 
+it.each([false, true])(
+	'routes Codex file-change starts only with newShellActivity=%s',
+	(newShellActivity) => {
+		const { handler, sessionId, emitter } = createTestContext({
+			toolType: 'codex',
+			isStreamJsonMode: true,
+			newShellActivity,
+			outputParser: new CodexOutputParser(),
+		});
+		const tools = vi.fn();
+		emitter.on('tool-execution', tools);
+		const item = {
+			id: 'write-1',
+			type: 'file_change',
+			changes: [{ path: 'created.txt', kind: 'add' }],
+		};
+		sendJsonLine(handler, sessionId, {
+			type: 'item.started',
+			item: { ...item, status: 'in_progress' },
+		});
+		expect(tools).toHaveBeenCalledTimes(newShellActivity ? 1 : 0);
+		if (newShellActivity)
+			expect(tools).toHaveBeenLastCalledWith(
+				sessionId,
+				expect.objectContaining({
+					toolCallId: 'write-1',
+					toolName: 'file_change',
+					state: { status: 'running', input: { changes: item.changes } },
+				})
+			);
+		sendJsonLine(handler, sessionId, {
+			type: 'item.completed',
+			item: { ...item, status: 'completed' },
+		});
+		expect(tools).toHaveBeenCalledTimes(newShellActivity ? 2 : 1);
+		expect(tools).toHaveBeenLastCalledWith(
+			sessionId,
+			expect.objectContaining({
+				toolCallId: 'write-1',
+				toolName: 'file_change',
+				state: { status: 'completed', input: { changes: item.changes } },
+			})
+		);
+	}
+);
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('StdoutHandler', () => {
@@ -3600,4 +3646,35 @@ describe('StdoutHandler - single JSON parse per line', () => {
 			mockedMatchSsh.mockReset();
 		});
 	});
+});
+
+describe('new shell Claude narration routing', () => {
+	it.each([true, false])(
+		'keeps public narration separate with new shell = %s',
+		(newShellActivity) => {
+			const { handler, sessionId, emitter } = createTestContext({
+				isStreamJsonMode: true,
+				toolType: 'claude-code',
+				outputParser: new ClaudeOutputParser(),
+				newShellActivity,
+			});
+			const chunks = vi.fn();
+			emitter.on('thinking-chunk', chunks);
+			sendJsonLine(handler, sessionId, {
+				type: 'assistant',
+				message: { content: [{ type: 'text', text: 'Checking files' }] },
+			});
+			sendJsonLine(handler, sessionId, {
+				type: 'assistant',
+				message: {
+					content: [{ type: 'tool_use', id: 'read', name: 'Read', input: { file_path: 'a.ts' } }],
+				},
+			});
+			expect(chunks.mock.calls).toEqual(
+				newShellActivity
+					? [[sessionId, 'Checking files', 'commentary']]
+					: [[sessionId, 'Checking files']]
+			);
+		}
+	);
 });

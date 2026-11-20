@@ -71,7 +71,9 @@ jobs:
     # (2026-11-11) the synthetic pass took 33 minutes on a hosted runner and the
     # job was cancelled at 45 minutes with no failures, 99 scenarios into the
     # real-smoke pass. Earlier limits of 25 and 45 minutes were outgrown the same way.
-    timeout-minutes: 75
+    # Team chat (2026-11-20) added about 40 scenarios and the synthetic pass ran
+    # past an hour, so 75 cancelled the job before real-smoke started.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -83,7 +85,8 @@ jobs:
       - run: npm run test:e2e
       - run: npm run test:e2e:real-smoke
       - uses: actions/upload-artifact@v6
-        if: failure()
+        # A job stopped at its time limit is cancelled, not failed; keep its traces too.
+        if: failure() || cancelled()
         with:
           name: native-e2e-failure
           path: e2e-results/

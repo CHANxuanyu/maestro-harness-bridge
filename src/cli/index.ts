@@ -32,6 +32,7 @@ import { ask } from './commands/ask';
 import { handoff } from './commands/handoff';
 import { changes } from './commands/changes';
 import { permissionCommand } from './commands/permission';
+import { modelsCommand } from './commands/models';
 import { queueList, queueRemove } from './commands/queue';
 import {
 	snoozeDismiss,
@@ -309,6 +310,15 @@ campaign
 
 // List commands
 const list = program.command('list').description('List resources');
+
+program
+	.command('models <provider>')
+	.description('Read the provider model catalog and cached quota (requires desktop)')
+	.option('--agent <id>', 'Use a stored agent account and host')
+	.option('--account-dir <path>', 'Use an explicit provider account directory')
+	.option('--ssh-remote <id>', 'Use a remote host (typed catalog currently unsupported)')
+	.option('--json', 'Output the full typed catalog as JSON')
+	.action(modelsCommand);
 
 list
 	.command('groups')
@@ -1703,6 +1713,7 @@ tabTargetOptions(tab.command('panel [tab-id-or-action] [action]'))
 		'--terminal <id>',
 		'Terminal to select, close or restart; defaults to the conversation selection. Terminals still running on a previous host can only be closed from their owner conversation'
 	)
+	.option('--turn <id>', projectSettingsT('workflows.activity.turnFilterHelp'))
 	.option('--filter <query>', 'Filter the conversation file tree; an empty string clears it')
 	.option('--content <text>', 'Set the remembered text file edit buffer before this action')
 	.option('--line <number>', 'Jump to a line in the remembered preview')

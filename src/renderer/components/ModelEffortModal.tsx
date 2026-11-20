@@ -157,6 +157,16 @@ function findTypeaheadMatch(models: string[], query: string, from: number): numb
 }
 
 export function ModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProps) {
+	const newShell = useSettingsStore((s) => s.newShell);
+	const provider = useSessionStore(
+		(s) => s.sessions.find((session) => session.id === s.activeSessionId)?.toolType
+	);
+	// The composer hosts the anchored picker; the same modal action opens both shells.
+	if (newShell && (provider === 'codex' || provider === 'claude-code')) return null;
+	return <ClassicModelEffortModal theme={theme} tabId={tabId} onClose={onClose} />;
+}
+
+function ClassicModelEffortModal({ theme, tabId, onClose }: ModelEffortModalProps) {
 	const t = useT();
 	const newShell = useSettingsStore((s) => s.newShell);
 	const activeSession = useSessionStore(selectActiveSession);

@@ -1,5 +1,23 @@
 # CLI / UI Parity Audit
 
+Team UI A1c (2026-11-17): `maestro-cli open create-team` uses the same registered
+new-shell setup surface as the sidebar, menu, palette and rebindable shortcut.
+The renderer routes create, answer, say, pause/resume/stop, accept,
+requestChanges and export through `teamClient()`. The service and `team` CLI
+verbs are the parallel backend work, not implemented by this UI task. Runtime
+command parity, export output and native seat identity must be verified when
+that bridge lands. Baseline edit/diff/return remain hidden feature gates; quota
+return-to-original has no verb in the supplied contract and is not offered.
+
+New-shell catalog picker: `maestro-cli open model-picker` reaches the same
+registered popover as the composer and shortcut. `models <provider> --agent
+<id> --json` reads the same catalog, defaults and quota. Existing `tab model`
+and `tab effort` remain literal override setters; `native-default` explicitly
+selects the native CLI default, while `inherit` still clears the tab override
+to inherit Maestro settings. `tab show` reads the stored choice. Automatic
+per-model recall belongs to the picker transaction; legacy CLI literal setters
+do not implicitly replace the other override.
+
 Rule (constitutional, see CLAUDE.md): anything a person can do by pointing and
 clicking in Maestro, an agent MUST be able to do through `maestro-cli`, through
 the same code path. A UI action ships with its CLI verb. This file records where
@@ -11,6 +29,28 @@ These are the actions exposed for the separately implemented team renderer.
 Every command accepts `--json`. Select a team with `--team <id>` (exact or
 unambiguous prefix); omission is accepted only when exactly one team exists.
 Handlers use `createTeamScheduler()` and require no Electron sender.
+
+| Preload action                                      | CLI                                                                                                                                                                                                                           | Shared IPC                                                                             |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `team.create(input)`                                | `team start --idea <text> --pm tool:model:effort --dev tool:model:effort --qa tool:model:effort [--sub-pm ...] [--sub-dev ...] [--sub-qa ...] [--deadline <ISO>] [--turns <n>] [--allow checks,push,pr,temp] [--path <root>]` | `team:create`                                                                          |
+| `team.list()`                                       | `team list`                                                                                                                                                                                                                   | `team:list`                                                                            |
+| `team.get(id)`                                      | `team get`; `team show brief\|baseline\|decisions\|meetings\|changes\|suggestions\|issues\|evidence\|output\|cost\|residual\|messages`                                                                                        | `team:get`, shared `reduceLedger()` projections                                        |
+| `team.status(id)`                                   | `team status`                                                                                                                                                                                                                 | `team:status`, shared `teamStatus()`                                                   |
+| `team.answer(id, card, option, note?)`              | `team answer <card> <option> [--note <text>]`                                                                                                                                                                                 | `team:answer`                                                                          |
+| Confirm the baseline card                           | `team baseline confirm`                                                                                                                                                                                                       | `team:status` then the same `team:answer`                                              |
+| `team.baselineEdit(id, criterionId, text, fields?)` | `team baseline edit <criterion> --text <text> [--proof app\|qa\|pm] [--how <text>]`                                                                                                                                           | `team:baselineEdit`; returns the new brief and diff                                    |
+| `team.baselineDiff(id)`                             | `team baseline diff`                                                                                                                                                                                                          | `team:baselineDiff`                                                                    |
+| `team.baselineReturn(id, note)`                     | `team baseline return --note <text>`                                                                                                                                                                                          | `team:baselineReturn`; same owner return action                                        |
+| `team.log(id, seat?)`                               | `team log [--seat pm\|dev\|qa]`                                                                                                                                                                                               | `team:log`; frozen assigned prompts and visible replies                                |
+| `team.say(id, text, to?)`                           | `team say [--to pm\|dev\|qa] <text>`                                                                                                                                                                                          | `team:say`; durable queued receipt, default PM, delivery after recovery or active turn |
+| `team.pause(id)`                                    | `team pause`                                                                                                                                                                                                                  | `team:pause`                                                                           |
+| `team.resume(id)`                                   | `team resume`                                                                                                                                                                                                                 | `team:resume`                                                                          |
+| `team.stop(id)`                                     | `team stop`                                                                                                                                                                                                                   | `team:stop`                                                                            |
+| `team.accept(id)`                                   | `team accept`                                                                                                                                                                                                                 | `team:accept`                                                                          |
+| `team.requestChanges(id, note)`                     | `team request-changes --note <text>`                                                                                                                                                                                          | `team:requestChanges`                                                                  |
+| `team.export(id)`                                   | `team export`                                                                                                                                                                                                                 | `team:export`, JSON text of config and ledger                                          |
+| `team.seatTranscript(id, seat)`                     | `team seat-transcript <seat>`                                                                                                                                                                                                 | `team:seatTranscript`                                                                  |
+| `team.onChanged(listener)`                          | Re-read `team get` or `team status`                                                                                                                                                                                           | `team:changed` carries `{ teamId, event }` after every durable append                  |
 
 Report normalization runs in that scheduler for native completion and recovery.
 The `team log --json` rows and preload `team.log()` expose the same optional
@@ -55,6 +95,16 @@ The app-generated budget card includes the same observations without a PM turn.
 | `team.action(id, action, detail)`       | `team action push\|draftPr\|merge\|publish\|externalMessage --note <text>` | `team:action`, records intent; only authorized push/draft PR execute                               |
 | App status and informational wrap-up    | `team status --json`                                                       | `team:status`, includes `wrapUp`; no owner approval for the plan                                   |
 | Cost and residual list                  | `team show cost` / `team show residual`                                    | `team:get` with canonical reducer; actual turns and billable observations, budget turns separately |
+
+M3 renderer owner actions use the same methods above: generic boundary answers,
+report extension/acceptance with gaps, pause/resume, and remembered permission
+classes. Residual assignment uses `team.assignResidual(id, itemId, owner)` through
+`team:assignResidual`; CLI: `team residual assign <item> --owner <name>` (an empty
+owner clears it). Assignment appends a residual event and never changes criterion
+evidence. The login control opens the existing account-scoped ReauthModal with
+the failed seat's launch settings. Interactive provider login has the existing
+PTY exception below; `team answer <card> login` records explicit recovery after
+`CODEX_HOME=<dir> codex login` or `CLAUDE_CONFIG_DIR=<dir> claude` plus `/login`.
 
 The CLI uses the existing authenticated `bridge.invoke` transport. It does not
 write the team directory. The exact preload signatures and subscription replay
@@ -923,6 +973,18 @@ then reads the old result through both the card and `native-history tool-output`
 
 ## Covered
 
+### Typed model catalog, B1-1, 2026-11-17
+
+| UI read                                                                 | CLI                                                                                             | Shared implementation                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Provider models, model-specific effort, native default and cached quota | `models <codex\|claude-code> [--agent <id>\|--account-dir <path>] [--ssh-remote <id>] [--json]` | `agents:getModelCatalog`, `createModelCatalogService()` |
+
+Requires the running desktop. Reads only cached quota; it never samples.
+Typed SSH catalogs explicitly return `unsupported-remote`; existing remote
+`getModels` remains unchanged. JSON retains hidden entries for resolving saved
+selections, while text output and the picker helper exclude them. Frontend
+integration and keyboard/focus acceptance belong to B1-2 through B1-4.
+
 ### 新界面 CLI 对等，Task L，2026-11-12
 
 | 界面动作                                       | CLI                                                                                                   | 共用实现                                                                                                                                             |
@@ -1212,6 +1274,7 @@ not read source identity or require a persistence receipt.
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Read changes grouped by conversation turn      | `changes --by-turn --tab <id> --json`                                                                             | `updateTurnWriteIndex()` and `groupChangesByTurn()`, with `agentSessions:turnWrites` and `git:changes` |
 | Choose By file or By turn on this conversation | `tab panel <id> changes-files` or `tab panel <id> changes-turns`                                                  | `changeNewShellPanel()`, persisted in `AITab.newShellPanel.changesView`                                |
+| Open a turn delivery's Changes filter          | `tab panel <id> changes-turns --turn <turn-id>`; read with `tab show`                                             | `patchNewShellPanel()`, persisted in `AITab.newShellPanel.changesTurnId`                               |
 | Open a diff, stage, unstage, revert or commit  | Existing `changes --file`, `changes stage`, `changes unstage`, `changes revert --yes`, `changes commit --message` | Existing Git handlers and panel actions                                                                |
 
 The new panel actions require `newShell`. Reading `--by-turn` is read only and

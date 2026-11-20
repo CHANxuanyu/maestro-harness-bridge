@@ -159,12 +159,24 @@ Answer an owner card
 
 Confirm, edit, diff or return the baseline
 
-| Option          | Description                       | Default |
-| --------------- | --------------------------------- | ------- |
-| `--team <id>`   | Team id or unique prefix          | -       |
-| `--json`        | Machine-readable result           | -       |
-| `--text <text>` | Replacement criterion text        | -       |
-| `--note <text>` | Reason for returning the baseline | -       |
+| Option           | Description                       | Default |
+| ---------------- | --------------------------------- | ------- |
+| `--team <id>`    | Team id or unique prefix          | -       |
+| `--json`         | Machine-readable result           | -       |
+| `--text <text>`  | Replacement criterion text        | -       |
+| `--note <text>`  | Reason for returning the baseline | -       |
+| `--proof <kind>` | Proof source: app, qa or pm       | -       |
+| `--how <text>`   | How the criterion will be proven  | -       |
+
+## `maestro-cli team residual <action> <item>`
+
+Assign the owner of an accepted residual item
+
+| Option           | Description                                  | Default |
+| ---------------- | -------------------------------------------- | ------- |
+| `--team <id>`    | Team id or unique prefix                     | -       |
+| `--json`         | Machine-readable result                      | -       |
+| `--owner <name>` | Follow-up owner; empty clears the assignment | -       |
 
 ## `maestro-cli team log`
 
@@ -337,6 +349,17 @@ List open terminal tabs in the desktop app (all agents unless --agent is given)
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------- |
 | `-a, --agent <id>` | List this agent’s terminals; new shell also includes its directory pool and terminals still running on its previous host | -       |
 | `--json`           | Output as JSON (for scripting)                                                                                           | -       |
+
+## `maestro-cli models <provider>`
+
+Read the provider model catalog and cached quota (requires desktop)
+
+| Option                 | Description                                             | Default |
+| ---------------------- | ------------------------------------------------------- | ------- |
+| `--agent <id>`         | Use a stored agent account and host                     | -       |
+| `--account-dir <path>` | Use an explicit provider account directory              | -       |
+| `--ssh-remote <id>`    | Use a remote host (typed catalog currently unsupported) | -       |
+| `--json`               | Output the full typed catalog as JSON                   | -       |
 
 ## `maestro-cli open-project <path>`
 

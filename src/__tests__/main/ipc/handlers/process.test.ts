@@ -1,3 +1,4 @@
+import { NATIVE_MODEL_DEFAULT } from '../../../../shared/modelCatalog';
 import { prepareCodexAppServerPermissions } from '../../../../main/permission-relay/codex-app-server';
 import { createPending, registerSpawn } from '../../../../main/permission-relay/registry';
 /**
@@ -43,6 +44,7 @@ import {
 	computeOmpCatalogKey,
 } from '../../../../main/agents/omp-model-catalog';
 import { runAsActingUser } from '../../../../main/web-server/auth/acting-user';
+import * as gitChanges from '../../../../main/git-changes';
 import {
 	noteTurnActor,
 	resolveTurnActor,
@@ -88,7 +90,7 @@ vi.mock('../../../../main/agents/path-prober', () => ({
 // Mock the agent-args utilities
 vi.mock('../../../../main/utils/agent-args', () => ({
 	buildAgentArgs: vi.fn((agent, opts) => opts.baseArgs || []),
-	applyAgentConfigOverrides: vi.fn((agent, args, opts) => ({
+	applyAgentConfigOverrides: vi.fn((agent, args, _opts) => ({
 		args,
 		modelSource: 'none' as const,
 		customArgsSource: 'none' as const,
@@ -326,7 +328,7 @@ vi.mock('../../../../main/prompt-manager', () => ({
 }));
 
 describe('process IPC handlers', () => {
-	let handlers: Map<string, Function>;
+	let handlers: Map<string, (...args: any[]) => any>;
 	let mockProcessManager: {
 		spawn: ReturnType<typeof vi.fn>;
 		write: ReturnType<typeof vi.fn>;
@@ -677,6 +679,32 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('Codex app-server opt-in', () => {
+		it('keeps explicit native defaults out of app-server turn overrides', async () => {
+			mockSettingsStore.get.mockImplementation((key, fallback) =>
+				key === 'newShell' || key === 'codexAppServer' ? true : fallback
+			);
+			mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+			mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+			await handlers.get('process:spawn')!(
+				{},
+				{
+					sessionId: 'project-ai-tab',
+					tabId: 'tab',
+					toolType: 'codex',
+					cwd: '/fixture/project',
+					command: 'codex',
+					args: [],
+					prompt: 'synthetic prompt',
+					sessionCustomModel: NATIVE_MODEL_DEFAULT,
+					sessionCustomEffort: NATIVE_MODEL_DEFAULT,
+				}
+			);
+			const spawn = mockProcessManager.spawn.mock.calls[0][0];
+			expect(spawn.codexAppServer.model).toBeUndefined();
+			expect(spawn.codexAppServer.effort).toBeUndefined();
+			spawn.codexAppServer.onDispose();
+		});
+
 		it.each([
 			[false, false],
 			[true, false],
@@ -838,6 +866,34 @@ describe('process IPC handlers', () => {
 	});
 
 	describe('process:spawn', () => {
+		it.each(['hanging', 'throwing'] as const)(
+			'starts the provider without waiting for a %s turn baseline',
+			async (mode) => {
+				const capture = vi.spyOn(gitChanges, 'beginGitTurn').mockImplementation(() => {
+					if (mode === 'throwing') throw new Error('capture failed');
+					return new Promise(() => {});
+				});
+				try {
+					mockSettingsStore.get.mockImplementation((key, fallback) =>
+						key === 'newShell' ? true : fallback
+					);
+					mockAgentDetector.getAgent.mockResolvedValue({ id: 'codex', requiresPty: false });
+					mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+					await handlers.get('process:spawn')!({} as any, {
+						sessionId: 'capture-ai-tab',
+						toolType: 'codex',
+						cwd: '/test/project',
+						command: 'codex',
+						args: [],
+						prompt: 'Continue',
+					});
+					expect(capture).toHaveBeenCalled();
+					expect(mockProcessManager.spawn).toHaveBeenCalledTimes(1);
+				} finally {
+					capture.mockRestore();
+				}
+			}
+		);
 		it.each([
 			[
 				'interactive',

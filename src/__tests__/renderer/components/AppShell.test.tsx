@@ -5,10 +5,13 @@ import { render, screen } from '@testing-library/react';
 import { AppShell, type AppShellProps } from '../../../renderer/components/AppShell';
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
+import { useTeamStore } from '../../../renderer/stores/teamStore';
+import { resetStore } from '../../helpers';
 import { createMockSession } from '../../helpers/mockSession';
 import { mockTheme } from '../../helpers/mockTheme';
 import { THEMES } from '../../../shared/themes';
 import { contrastRatio } from '../../../shared/colorContrast';
+import { teamConfig, defaultPath } from './Team/defaultPath';
 
 vi.mock('../../../renderer/components/Toast', () => ({ ToastContainer: () => null }));
 vi.mock('../../../renderer/components/CenterFlash', () => ({ CenterFlash: () => null }));
@@ -33,8 +36,20 @@ vi.mock('../../../renderer/components/EmptyStateView', () => ({
 vi.mock('../../../renderer/components/ProjectStartView', () => ({
 	ProjectStartView: () => <div data-testid="new-start" />,
 }));
+vi.mock('../../../renderer/components/SessionList', () => ({
+	SessionList: () => <div data-testid="project-sidebar" />,
+}));
+vi.mock('../../../renderer/components/MainPanel', async () => {
+	const { forwardRef } = await import('react');
+	return { MainPanel: forwardRef(() => <div data-testid="main-panel" />) };
+});
+vi.mock('../../../renderer/components/RightPanel', async () => {
+	const { forwardRef } = await import('react');
+	return { RightPanel: forwardRef(() => <div data-testid="right-panel" />) };
+});
 
 beforeEach(() => {
+	resetStore(useTeamStore);
 	useSettingsStore.setState({ newShell: false });
 	useSessionStore.setState({
 		sessions: [createMockSession({ id: 's', name: 'Conversation title', groupId: 'g' })],
@@ -110,5 +125,24 @@ describe('AppShell title strip', () => {
 		expect(!!screen.queryByTestId('new-start')).toBe(newShell);
 		expect(!!screen.queryByTestId('classic-start')).toBe(!newShell);
 		expect(!!screen.queryByRole('button', { name: 'Open project…' })).toBe(newShell);
+		useTeamStore.setState({ activeTeamId: 'team' });
+		rerender(<AppShell {...props} hasSessions teamView={<div data-testid="team-slot" />} />);
+		expect(!!screen.queryByTestId('team-slot')).toBe(newShell);
+		expect(!!screen.queryByTestId('main-panel')).toBe(!newShell);
+		expect(!!screen.queryByTestId('right-panel')).toBe(!newShell);
+		if (newShell) {
+			rerender(<AppShell {...props} sessionsLoaded teamView={<div data-testid="team-slot" />} />);
+			expect(screen.getByTestId('team-slot')).toBeVisible();
+			expect(screen.queryByTestId('new-start')).toBeNull();
+			useTeamStore.getState().selectTeam(null);
+			useTeamStore.getState().mirror({ config: teamConfig, events: defaultPath });
+			rerender(<AppShell {...props} sessionsLoaded teamView={<div data-testid="team-slot" />} />);
+			expect(screen.getByTestId('project-sidebar')).toBeVisible();
+			expect(screen.getByTestId('new-start')).toBeVisible();
+			useTeamStore.getState().selectTeam(teamConfig.id);
+			rerender(<AppShell {...props} sessionsLoaded teamView={<div data-testid="team-slot" />} />);
+			expect(screen.getByTestId('project-sidebar')).toBeVisible();
+			expect(screen.getByTestId('team-slot')).toBeVisible();
+		}
 	});
 });

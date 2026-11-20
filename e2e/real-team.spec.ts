@@ -104,7 +104,11 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 	const medium = size === 'medium';
 	const turnBudget = medium ? 40 : 20;
 	const wallLimitMs = (medium ? 60 : 30) * DURATION_MS.minute;
-	const turnLimitMs = 4 * DURATION_MS.minute;
+	// One turn may work as long as the product lets it: the scheduler declares a seat
+	// stalled after ten minutes without progress. A 4 minute wall clock failed two
+	// medium runs on a single slow Codex PM turn while every other turn took under a
+	// minute. The turn budget and the wall limit still bound the run's cost.
+	const turnLimitMs = 10 * DURATION_MS.minute; // TEAM_STALL_MS in src/main/team/scheduler.ts
 	info.setTimeout(wallLimitMs + 2 * DURATION_MS.minute);
 	const startedAt = Date.now();
 	const native = new RealAcceptanceApp(info, 'TEAM', ['claude', 'codex']);
@@ -423,6 +427,15 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 					assertDelivered(state);
 					intervention.option = 'accept';
 					await native.cli('team', 'accept', '--team', team!.id);
+				} else if (card.boundary === 'commitment' && card.standardChange) {
+					// PRD R1-4: a rewritten standard or a changed proof is the owner's call. The
+					// owner here takes the card's recommendation, which never widens the scope,
+					// and the decision is counted like every other owner intervention.
+					const recommended = card.options?.find((option) => option.recommended);
+					expect(recommended, 'A standard change card must recommend an option').toBeTruthy();
+					expect(['approve', 'keep']).toContain(recommended!.id);
+					intervention.option = recommended!.id;
+					await native.cli('team', 'answer', card.id, recommended!.id, '--team', team!.id);
 				} else {
 					// No scope/model/login/permission change is needed by these closed local tasks.
 					// A real budget crossing is recorded and stopped, never enlarged or accepted with gaps.

@@ -239,11 +239,17 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 					turn.finished!.seq > lastSubmission.seq
 			)
 		).toBe(true);
-		expect(
-			state.issues.every(
-				(issue) => issue.state === 'verified-pass' && issue.history.at(-1)?.actor === 'qa'
-			)
-		).toBe(true);
+		// Every issue is closed. A defect is closed by QA's re-verification; a standard
+		// problem is settled by PM or the app, never routed to QA (PRD 6.6 R1-10).
+		for (const issue of state.issues)
+			expect(
+				[issue.opened.issueKind, issue.state, issue.history.at(-1)?.actor],
+				`Issue ${issue.id} must be closed by its owner`
+			).toEqual(
+				issue.opened.issueKind === 'standard'
+					? ['standard', 'verified-pass', expect.stringMatching(/^(pm|app)$/)]
+					: [issue.opened.issueKind, 'verified-pass', 'qa']
+			);
 		expect(state.reviews.at(-1)).toMatchObject({ actor: 'pm', verdict: 'pass' });
 		expect(state.reviews.at(-1)!.seq).toBeGreaterThan(lastCheck!.seq);
 		if (medium) {

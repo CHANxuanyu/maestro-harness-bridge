@@ -1,5 +1,9 @@
 # 分支工作记录
 
+## 2026-11-21：V-1 真实中等任务通过
+
+`e2e/real-team.spec.ts --grep 'team medium task'`，提交 `c538d81c2`（主线含 B4，加两轮团队效率修复）。PM 与开发为 Codex（codex-cli 0.171.0-alpha.13，gpt-6.2-sol），QA 为 Claude Code 2.1.317（Sonnet 5.5）。结果：通过，12 个回合（预算 40），5.4 分钟，约 137 万 token，Claude 部分 0.43 美元（Codex 走订阅，应用不计费用）；老板只做了确认基线和验收两次，没有发消息；0 场讨论，0 次 PM 打回，0 个 QA 问题。同一配置此前 6 次失败的原因与处理：PM 的 Codex 回合超过脚本原定的 4 分钟（脚本上限改为与调度器一致的 10 分钟）；团队把改写标准的变更正确地交给老板，脚本不认这类卡（脚本改为按卡片推荐作答并计入介入）；基线后浪费 23 回合（四处产品修复）；基线前浪费约 24 回合（草稿需求的质询点交给 PM、PM 的修改直接成为新版本）；脚本中按问题类型、快照产出、M3 统计字段和共用工作区的启动计数四处过时断言。每次运行的台账另存于本机证据目录，不入库。
+
 ## 2026-11-20：团队效率修复（第五次真实中等任务）
 
 真实中等任务第五次运行在基线后用了 23 个回合仍未交付。Codex 先完成了基线取代旧决定和期望退出码的主体，额度用尽后由 Opus 接手，补完实验结案规则、结论派发的回合类型与提示、界面显示和回归测试；中途尝试用 agy 接手，30 分钟没有产出后停止。命令：`npx vitest run src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/main/check-runner.test.ts` 584 项通过；`npm run lint`、`npx tsc -p e2e/tsconfig.team.json --noEmit` 通过。原生场景和真实重跑结果见下一段。

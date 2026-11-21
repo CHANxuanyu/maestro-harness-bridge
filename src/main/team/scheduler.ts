@@ -10,6 +10,7 @@ import {
 	discussionDecider,
 	referenceVotes,
 	pmMayChange,
+	repeatedSeatFault,
 	missingOutputLocations,
 	teamReadyForDemo,
 	teamTurnPermission,
@@ -330,9 +331,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			const source = entry.configSource ?? entry.seat;
 			const model = entry.model ?? state.config!.seats[entry.seat];
 			const sample = deps.quota?.(state.config!, source, model);
+			// A model that keeps failing this seat is not brought back by a quota reset.
 			const restored =
-				(!entry.login && entry.resetsAt !== undefined && now() >= entry.resetsAt) ||
-				(sample && sample.sampledAt > entry.at && !sample.exhausted);
+				entry.cause !== 'repeated-fault' &&
+				((!entry.login && entry.resetsAt !== undefined && now() >= entry.resetsAt) ||
+					(sample && sample.sampledAt > entry.at && !sample.exhausted));
 			if (restored) {
 				await append(id, {
 					kind: 'model_recovered',
@@ -519,14 +522,22 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					seat,
 					boundary: recovery.decision.boundaries[0],
 					boundaries: recovery.decision.boundaries,
-					title: `${seat} recovery would cross the deadline`,
-					body: 'The original model is unavailable and waiting for recovery would cross the deadline.',
+					title:
+						entry.cause === 'repeated-fault'
+							? `${seat} keeps failing on its model`
+							: `${seat} recovery would cross the deadline`,
+					body:
+						entry.cause === 'repeated-fault'
+							? 'The same fault recurred after fresh conversations without progress; another attempt would repeat it.'
+							: 'The original model is unavailable and waiting for recovery would cross the deadline.',
 					payload: {
 						type: 'escalation',
 						cause: 'availability',
 						stuck: entry.detail,
 						paths: [
-							'The original model is unavailable; another call would repeat the refusal.',
+							entry.cause === 'repeated-fault'
+								? 'Fresh conversations of this model failed the same way; a further retry would repeat it.'
+								: 'The original model is unavailable; another call would repeat the refusal.',
 							'No available authorized substitute remains.',
 							authorized(state, 'temporaryTakeover')
 								? 'Existing team models are also unavailable; waiting for reset needs more time.'
@@ -949,6 +960,19 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				detail: finished.reportError,
 				id: `${dispatch.dispatchId}:fault`,
 			});
+			const repeated = repeatedSeatFault((await load(id)).events, dispatch.seat);
+			const binding = (await stateFor(id)).seats[dispatch.seat].binding;
+			if (repeated && binding)
+				await append(id, {
+					kind: 'quota_exhausted',
+					actor: 'app',
+					seat: dispatch.seat,
+					model: binding.model,
+					configSource: binding.configSource ?? dispatch.seat,
+					cause: 'repeated-fault',
+					detail: `The same ${repeated.fault} recurred without progress: ${repeated.detail ?? 'no detail'}`,
+					id: `${dispatch.dispatchId}:repeated-fault`,
+				});
 		}
 	};
 	const launch = (data: RecordData, dispatch: Dispatch, recover = false) => {

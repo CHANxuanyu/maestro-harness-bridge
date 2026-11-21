@@ -2658,6 +2658,42 @@ describe('team scheduler', () => {
 		expect(events.some((e) => e.kind === 'workspace_inspected')).toBe(true);
 	});
 
+	it('M3 a seat failing the same way after a fresh conversation goes to the takeover order (real M2-10)', async () => {
+		await begin();
+		const original = requests[0];
+		const tokenLimit = 'Maximum token limit reached. Start a new session to continue.';
+		completions.get(original.dispatchId!)!({
+			...result(original, ''),
+			exitCode: 1,
+			failure: { kind: 'session-broken', detail: tokenLimit },
+		});
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+		await drain();
+		const fresh = requests[1];
+		expect(fresh).toMatchObject({ tool: original.tool, nativeSessionId: undefined });
+		completions.get(fresh.dispatchId!)!({
+			...result(fresh, ''),
+			exitCode: 1,
+			failure: { kind: 'session-broken', detail: tokenLimit },
+		});
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+		await drain();
+		expect(state().unavailable.at(-1)).toMatchObject({
+			seat: 'pm',
+			cause: 'repeated-fault',
+			detail: expect.stringContaining(tokenLimit),
+		});
+		expect(events.find((e) => e.kind === 'substitute_took_over')).toMatchObject({
+			seat: 'pm',
+			temporary: true,
+		});
+		const takeover = requests.at(-1)!;
+		expect(takeover.dispatchId).not.toBe(fresh.dispatchId);
+		expect([takeover.tool, takeover.model]).not.toEqual([original.tool, original.model]);
+		expect(takeover.nativeSessionId).toBeUndefined();
+	});
 	it('M3 still-working is not a fault, login identifies the account while authorized takeover works', async () => {
 		deps.seatAccountDir = vi.fn(() => '/synthetic/pm-account');
 		await begin();

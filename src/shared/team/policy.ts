@@ -7,6 +7,7 @@ import type {
 	BaselineDiff,
 	Brief,
 	LedgerActor,
+	LedgerEvent,
 	OutputCapture,
 	SeatRole,
 	SeatModel,
@@ -122,6 +123,42 @@ export function teamModelUnavailable(
 	});
 }
 
+/**
+ * A seat that hits the same fault twice without reaching a milestone (a submission,
+ * a completed work report, or any non-work report) is not recovering: another fresh
+ * conversation of the same model repeats it (PRD 6.8.2). Real run M2-10: a light
+ * developer model hit its session token limit on every work turn, and each fresh
+ * session counted as recovered, so the cycle ran until the budget was gone.
+ */
+export function repeatedSeatFault(
+	events: LedgerEvent[],
+	seat: SeatRole
+): TeamEvent<'member_fault'> | undefined {
+	let milestone = 0;
+	for (const e of events)
+		if (
+			// A different model starts its own count.
+			(e.kind === 'seat_bound' &&
+				e.seat === seat &&
+				['temporary', 'substitute'].includes(e.reason ?? '')) ||
+			(e.kind === 'seat_configured' && e.seat === seat) ||
+			(e.kind === 'workspace_submitted' && seat === 'dev') ||
+			(e.kind === 'report_accepted' &&
+				e.seat === seat &&
+				(e.report.type !== 'work' || e.report.claimsComplete === true))
+		)
+			milestone = e.seq;
+	const faults = events.filter(
+		(e): e is TeamEvent<'member_fault'> =>
+			e.kind === 'member_fault' &&
+			e.seat === seat &&
+			e.seq > milestone &&
+			['session-broken', 'missing-report', 'bad-report'].includes(e.fault)
+	);
+	const last = faults.at(-1);
+	return last && faults.filter((f) => f.fault === last.fault).length >= 2 ? last : undefined;
+}
+
 /** Ordered, authorized recovery choices. All escalation uses the common decision rules. */
 export function teamRecoveryDecision(state: TeamState, seat: SeatRole, temporary: boolean) {
 	const config = state.config!;
@@ -158,7 +195,9 @@ export function teamRecoveryDecision(state: TeamState, seat: SeatRole, temporary
 			? 'Team model and temporary takeover authorization'
 			: 'Explicitly selected substitute',
 	}));
+	const repeated = unavailable?.cause === 'repeated-fault';
 	if (
+		!repeated &&
 		!unavailable?.login &&
 		(config.deadline === undefined ||
 			unavailable?.resetsAt === undefined ||
@@ -186,12 +225,13 @@ export function teamRecoveryDecision(state: TeamState, seat: SeatRole, temporary
 				cost: 'Use an independent new conversation and existing team model quota.',
 				recommended: true,
 			});
-		candidates.push({
-			key: 'extend',
-			plan: 'Extend the deadline to wait for the original model',
-			boundary: 'budget',
-			cost: `Delivery moves past ${unavailable?.resetsAt ? new Date(unavailable.resetsAt).toISOString() : 'the current deadline'}.`,
-		});
+		if (!repeated)
+			candidates.push({
+				key: 'extend',
+				plan: 'Extend the deadline to wait for the original model',
+				boundary: 'budget',
+				cost: `Delivery moves past ${unavailable?.resetsAt ? new Date(unavailable.resetsAt).toISOString() : 'the current deadline'}.`,
+			});
 	}
 	if (candidates.filter((c) => c.boundary).length < 2)
 		candidates.push({

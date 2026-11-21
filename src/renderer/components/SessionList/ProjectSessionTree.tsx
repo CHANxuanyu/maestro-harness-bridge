@@ -1,3 +1,4 @@
+import { ConversationWaitingBadge } from '../ConversationCheckDelivery';
 import { openUiSurface } from '../../utils/openUiSurface';
 import { TeamSidebar } from '../Team/TeamSidebar';
 import { usePermissionRequestStore } from '../../stores/permissionRequestStore';
@@ -629,6 +630,9 @@ const ConversationRow = memo(function ConversationRow({
 					{/* A middle-shortened title is for the eye only; assistive tech and
 					    text search still get the whole title. */}
 					{visibleTitle !== title && <span className="sr-only">{title}</span>}
+					{newShell && conversation.ownerId && conversation.tabId && (
+						<ConversationWaitingBadge sessionId={conversation.ownerId} tabId={conversation.tabId} />
+					)}
 					{worktree && (
 						// Where the conversation ran, kept quieter than its title: the
 						// new shell keeps only the marker; branch and path wait in the hover.

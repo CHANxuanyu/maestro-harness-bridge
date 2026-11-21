@@ -2,6 +2,7 @@ import type { AITab } from '../types';
 import { stripMarkdown } from '../../shared/markdown';
 import { isSessionIdLabel } from './tabHelpers';
 import { isInternalDesktopEnvelope } from './transcriptMessages';
+import { isConversationAutomationPrompt } from '../../shared/conversationAutomationPrompt';
 
 /** Longest first-message excerpt used as a title before it is cut. */
 const EXCERPT_LIMIT = 80;
@@ -22,13 +23,21 @@ export function conversationDisplayTitle(
 ): string | null {
 	if (!tab) return null;
 	const name = tab.name?.trim();
-	if (name && !isSessionIdLabel(name, tab.agentSessionId)) {
+	if (
+		name &&
+		!isSessionIdLabel(name, tab.agentSessionId) &&
+		!isConversationAutomationPrompt(name)
+	) {
 		const title = plainText ? plainConversationTitle(name) : name;
 		if (title) return title;
 	}
 	const firstUser = (tab.logs ?? []).find(
 		(entry) =>
-			entry.source === 'user' && !!entry.text?.trim() && !isInternalDesktopEnvelope(entry.text)
+			entry.source === 'user' &&
+			!!entry.text?.trim() &&
+			!isInternalDesktopEnvelope(entry.text) &&
+			!entry.automationTurn &&
+			!isConversationAutomationPrompt(entry.text)
 	);
 	const line = firstUser?.text.trim().split('\n')[0]?.trim();
 	if (!line) return null;

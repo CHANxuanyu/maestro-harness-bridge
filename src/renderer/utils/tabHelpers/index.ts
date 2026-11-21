@@ -1,4 +1,8 @@
 import { projectConversationFields } from '../projectConversationDefaults';
+import {
+	isConversationAutomationPrompt,
+	readConversationAutomationPrompt,
+} from '../../../shared/conversationAutomationPrompt';
 // Tab helper functions for AI multi-tab support
 // These helpers manage AITab state within Maestro sessions
 
@@ -423,7 +427,7 @@ export function moveUnifiedTabToTarget(
  * displaying the same `SES_XXXX`).
  */
 export function getTabDisplayName(tab: AITab, _sessionAgentSessionId?: string | null): string {
-	if (tab.name) {
+	if (tab.name && !isConversationAutomationPrompt(tab.name)) {
 		return tab.name;
 	}
 	if (tab.agentSessionId) {
@@ -883,17 +887,19 @@ export interface QueuedItemTarget {
  */
 export function resolveQueuedItemTarget(
 	session: Session,
-	item: Pick<QueuedItem, 'tabId'>
+	item: Pick<QueuedItem, 'tabId' | 'exactTarget'>
 ): QueuedItemTarget | null {
 	if (item.tabId) {
 		if (session.aiTabs?.some((tab) => tab.id === item.tabId)) {
 			return { tabId: item.tabId, location: 'aiTab' };
 		}
+		if (item.exactTarget) return null;
 		const orphan = session.orphanedThinkingTabs?.find((tab) => tab.id === item.tabId);
 		if (orphan) {
 			return { tabId: orphan.id, location: 'orphan' };
 		}
 	}
+	if (item.exactTarget) return null;
 	const active = getActiveTab(session);
 	return active ? { tabId: active.id, location: 'active' } : null;
 }
@@ -925,6 +931,7 @@ export function markTabRunningQueuedItem(tab: AITab, item: QueuedItem, session: 
 			timestamp: next.thinkingStartTime ?? Date.now(),
 			source: 'user',
 			text: item.text,
+			automationTurn: readConversationAutomationPrompt(item.text),
 			images: item.images,
 			// Stamped so a dispatch that throws before spawning can take this card
 			// back out again - the prompt never reached a model, and leaving the

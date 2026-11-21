@@ -21,6 +21,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { extractQuickTabName, isAiTabHidden } from '../utils/tabHelpers';
 import { captureException } from '../utils/sentry';
 import type { AITab, Session } from '../types';
+import { isConversationAutomationPrompt } from '../../shared/conversationAutomationPrompt';
 
 /**
  * Ceiling on the text handed to the namer. Richer context produces names that
@@ -50,11 +51,12 @@ export function collectNamingPrompt(
 	currentMessage = '',
 	maxChars = NAMING_PROMPT_MAX_CHARS
 ): string {
+	if (isConversationAutomationPrompt(currentMessage)) currentMessage = '';
 	const collected: string[] = [];
 	let total = 0;
 	for (const raw of priorMessages) {
 		const text = raw.trim();
-		if (!text) continue;
+		if (!text || isConversationAutomationPrompt(text)) continue;
 		if (total + text.length > maxChars) {
 			collected.push(text.substring(0, maxChars - total));
 			total = maxChars;
@@ -108,7 +110,7 @@ export interface RequestTabAutoNameOptions {
 	label?: string;
 }
 
-const hasNoName = (tab: AITab): boolean => !tab.name;
+const hasNoName = (tab: AITab): boolean => !tab.name || isConversationAutomationPrompt(tab.name);
 
 function findTab(sessionId: string, tabId: string): AITab | undefined {
 	const session = selectSessionById(sessionId)(useSessionStore.getState());
@@ -138,7 +140,7 @@ export function requestTabAutoName(options: RequestTabAutoNameOptions): void {
 	} = options;
 
 	if (!force && !useSettingsStore.getState().automaticTabNamingEnabled) return;
-	if (!prompt.trim()) return;
+	if (!prompt.trim() || isConversationAutomationPrompt(prompt)) return;
 
 	const sessionId = session.id;
 	const tab = session.aiTabs.find((t) => t.id === tabId);
@@ -263,13 +265,15 @@ export function requestTabAutoNameForMessage(
 	let wasGenerating = true;
 	try {
 		const text = message.trim();
-		if (!text) return;
+		if (!text || isConversationAutomationPrompt(text)) return;
 		const liveSession = selectSessionById(session.id)(useSessionStore.getState()) ?? session;
 		const tab = liveSession.aiTabs.find((t) => t.id === tabId);
 		if (!tab || isAiTabHidden(tab)) return;
 		wasGenerating = !!tab.isGeneratingName;
 
-		const prior = tab.logs.filter((entry) => entry.source === 'user').map((entry) => entry.text);
+		const prior = tab.logs
+			.filter((entry) => entry.source === 'user' && !entry.automationTurn)
+			.map((entry) => entry.text);
 		if (prior.length > 0 && prior[prior.length - 1]?.trim() === text) prior.pop();
 
 		requestTabAutoName({

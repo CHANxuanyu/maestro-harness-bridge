@@ -18,6 +18,7 @@ import {
 	beginGitTurn,
 	recordGitTurnTool,
 	finishGitTurn,
+	onGitTurnFinished,
 	getGitChanges,
 	getGitChangeDiff,
 	parseGitChanges,
@@ -93,6 +94,89 @@ describe('combined changes on a real repository', { timeout: 60_000 }, () => {
 			deletions: 1,
 		});
 		expect(finishGitTurn('delivery')).toBeUndefined();
+	});
+
+	it('notifies checks of shell-written changes with a main-owned evidence identity', async () => {
+		const observed = vi.fn();
+		const unsubscribe = onGitTurnFinished(observed, (id) => id === 'checks');
+		try {
+			await beginGitTurn('checks', cwd);
+			writeFileSync(path.join(cwd, 'shell-change.txt'), 'a shell wrote this\n');
+			const delivery = await finishGitTurn('checks');
+			expect(delivery?.files).toBe(0);
+			expect(delivery?.checkRunId).toBeTruthy();
+			expect(observed).toHaveBeenCalledWith('checks', delivery, { cwd, changed: true }, undefined);
+		} finally {
+			unsubscribe();
+		}
+	});
+
+	it('still ends a tracked turn that wrote nothing, so a follow-up never waits on it', async () => {
+		const observed = vi.fn();
+		const unsubscribe = onGitTurnFinished(observed, (id) => id === 'idle-check');
+		try {
+			await beginGitTurn('idle-check', cwd);
+			const delivery = await finishGitTurn('idle-check');
+			expect(delivery).toMatchObject({ files: 0, paths: [] });
+			expect(observed).toHaveBeenCalledWith(
+				'idle-check',
+				delivery,
+				{ cwd, changed: false },
+				undefined
+			);
+			// An untracked turn without tool writes keeps the plain no-delivery result.
+			await beginGitTurn('untracked', cwd);
+			expect(await finishGitTurn('untracked')).toBeUndefined();
+		} finally {
+			unsubscribe();
+		}
+	});
+
+	it('ends a tracked turn whose baseline never formed, with the change unknown and assumed', async () => {
+		const observed = vi.fn();
+		let delivery = 'first-delivery';
+		const unsubscribe = onGitTurnFinished(
+			observed,
+			(id) => id === 'fast',
+			() => delivery
+		);
+		try {
+			// The exit arrives while the baseline read is still in flight.
+			const begun = beginGitTurn('fast', cwd);
+			const finished = await finishGitTurn('fast');
+			delivery = 'next-turn-delivery';
+			await begun;
+			expect(finished).toMatchObject({ files: 0 });
+			expect(finished?.checkRunId).toBeTruthy();
+			expect(observed).toHaveBeenCalledTimes(1);
+			expect(observed).toHaveBeenCalledWith(
+				'fast',
+				finished,
+				{ cwd, changed: true },
+				'first-delivery'
+			);
+		} finally {
+			unsubscribe();
+		}
+	});
+
+	it('reports a tracked turn outside Git as unchanged', async () => {
+		const outside = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'maestro-no-git-')));
+		const observed = vi.fn();
+		const unsubscribe = onGitTurnFinished(observed, (id) => id === 'plain');
+		try {
+			await beginGitTurn('plain', outside);
+			await finishGitTurn('plain');
+			expect(observed).toHaveBeenCalledWith(
+				'plain',
+				expect.objectContaining({ files: 0 }),
+				{ cwd: outside, changed: false },
+				undefined
+			);
+		} finally {
+			unsubscribe();
+			rmSync(outside, { recursive: true, force: true });
+		}
 	});
 
 	it('does not replace unknown boundary counts with the workspace diff after HEAD moves', async () => {

@@ -1,3 +1,5 @@
+import { ChecksPanel } from './ChecksPanel';
+import { FollowUpsPanel } from './FollowUpsPanel';
 import { NewShellWebPanel } from './NewShellWebPanel';
 import { NewShellTerminalPanel, type NewShellTerminalPanelHandle } from './NewShellTerminalPanel';
 import { TasksPanel } from './TasksPanel';
@@ -629,58 +631,68 @@ export const RightPanel = memo(
 					className={`flex border-b shrink-0 ${newShell ? 'h-12' : 'h-16'}`}
 					style={{ borderColor: theme.colors.border }}
 				>
-					{(newShell
-						? (['changes', 'files', 'terminal', 'tasks', 'web'] as const)
-						: (['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const)
-					).map((tab) => {
-						const label =
-							tab === 'terminal' || tab === 'tasks' || tab === 'web'
-								? t(`workflows.newShell.${tab}`)
-								: tab === 'changes'
-									? t('workflows.changes.tab')
-									: tab === 'autorun'
-										? t('workflows.shell.autoRun')
-										: tab === 'files'
-											? t('workflows.labels.files')
-											: t('workflows.shell.history');
-						// Each of these three tabs has its own chord. Surfacing it on the
-						// header the user is already clicking is the cheapest place to
-						// teach it.
-						const jumpShortcut =
-							tab === 'terminal'
-								? shortcuts.toggleMode
-								: tab === 'tasks'
-									? shortcuts.goToTasks
-									: tab === 'files'
-										? shortcuts.goToFiles
-										: tab === 'history'
-											? shortcuts.goToHistory
-											: tab === 'autorun'
-												? shortcuts.goToAutoRun
-												: undefined;
-						return (
-							<button
-								key={tab}
-								onClick={() => setActiveRightTab(tab as RightPanelTab)}
-								// This is the panel's HEADING - it names which of three views
-								// you are looking at - so it is the largest thing in the Right
-								// Bar header, not the smallest. Deliberately a different
-								// constant from the filter pills below it: a heading sits above
-								// its content, a control that labels rows sits below them.
-								className="flex-1 min-w-0 whitespace-nowrap font-bold border-b-2 transition-colors"
-								style={{
-									fontSize: RIGHT_PANEL_TAB_FONT_SIZE,
-									lineHeight: RIGHT_PANEL_TAB_LINE_HEIGHT,
-									borderColor: activeRightTab === tab ? theme.colors.accent : 'transparent',
-									color: activeRightTab === tab ? theme.colors.textMain : theme.colors.textDim,
-								}}
-								title={`${label}${shortcutSuffix(jumpShortcut?.keys)}`}
-								data-tour={`${tab}-tab`}
-							>
-								{label}
-							</button>
-						);
-					})}
+					<div className="flex flex-1 min-w-0 overflow-x-auto">
+						{(newShell
+							? (['checks', 'follow-ups', 'changes', 'files', 'terminal', 'tasks', 'web'] as const)
+							: (['files', 'history', ...(autoRunDisabled ? [] : ['autorun'])] as const)
+						).map((tab) => {
+							const label =
+								tab === 'checks'
+									? t('workflows.automation.checks')
+									: tab === 'follow-ups'
+										? t('workflows.automation.followUps')
+										: tab === 'terminal' || tab === 'tasks' || tab === 'web'
+											? t(`workflows.newShell.${tab}`)
+											: tab === 'changes'
+												? t('workflows.changes.tab')
+												: tab === 'autorun'
+													? t('workflows.shell.autoRun')
+													: tab === 'files'
+														? t('workflows.labels.files')
+														: t('workflows.shell.history');
+							// Each of these three tabs has its own chord. Surfacing it on the
+							// header the user is already clicking is the cheapest place to
+							// teach it.
+							const jumpShortcut =
+								tab === 'checks'
+									? shortcuts.goToChecks
+									: tab === 'follow-ups'
+										? shortcuts.goToFollowUps
+										: tab === 'terminal'
+											? shortcuts.toggleMode
+											: tab === 'tasks'
+												? shortcuts.goToTasks
+												: tab === 'files'
+													? shortcuts.goToFiles
+													: tab === 'history'
+														? shortcuts.goToHistory
+														: tab === 'autorun'
+															? shortcuts.goToAutoRun
+															: undefined;
+							return (
+								<button
+									key={tab}
+									onClick={() => setActiveRightTab(tab as RightPanelTab)}
+									// This is the panel's HEADING - it names which of three views
+									// you are looking at - so it is the largest thing in the Right
+									// Bar header, not the smallest. Deliberately a different
+									// constant from the filter pills below it: a heading sits above
+									// its content, a control that labels rows sits below them.
+									className="flex-1 shrink-0 px-2 whitespace-nowrap font-bold border-b-2 transition-colors"
+									style={{
+										fontSize: RIGHT_PANEL_TAB_FONT_SIZE,
+										lineHeight: RIGHT_PANEL_TAB_LINE_HEIGHT,
+										borderColor: activeRightTab === tab ? theme.colors.accent : 'transparent',
+										color: activeRightTab === tab ? theme.colors.textMain : theme.colors.textDim,
+									}}
+									title={`${label}${shortcutSuffix(jumpShortcut?.keys)}`}
+									data-tour={`${tab}-tab`}
+								>
+									{label}
+								</button>
+							);
+						})}
+					</div>
 
 					<PluginUiItemsSlot surface="rightPanelTab" className="px-1 shrink-0" />
 
@@ -743,6 +755,19 @@ export const RightPanel = memo(
 							session={session}
 							theme={theme}
 							visible={rightPanelOpen}
+						/>
+					)}
+					{newShell && session?.activeTabId && activeRightTab === 'checks' && (
+						<ChecksPanel
+							key={`${session.id}:${session.activeTabId}`}
+							target={{ kind: 'conversation', sessionId: session.id, tabId: session.activeTabId }}
+						/>
+					)}
+					{newShell && session?.activeTabId && activeRightTab === 'follow-ups' && (
+						<FollowUpsPanel
+							key={`${session.id}:${session.activeTabId}`}
+							target={{ kind: 'conversation', sessionId: session.id, tabId: session.activeTabId }}
+							cwd={session.cwd}
 						/>
 					)}
 					{newShell && activeRightTab === 'tasks' && (

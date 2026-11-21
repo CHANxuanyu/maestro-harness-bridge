@@ -2271,6 +2271,39 @@ describe('agent-detector', () => {
 			expect(options).toEqual(['', 'low', 'medium', 'high', 'xhigh', 'max']);
 		});
 
+		it('strips color codes from the probe warning before reading the levels', async () => {
+			// Real Claude CLI output, measured 2026-11-20: the warning is colored, and the
+			// reset code after `max.` became part of the last level (`Max. [39m`).
+			mockExecFileNoThrow.mockImplementation(async (cmd, args) => {
+				const binaryName = args[0];
+				if (binaryName === 'claude')
+					return { stdout: '/usr/bin/claude\n', stderr: '', exitCode: 0 };
+				if (binaryName === 'bash') return { stdout: '/bin/bash\n', stderr: '', exitCode: 0 };
+				if (cmd === '/usr/bin/claude' && args[0] === '--help')
+					return { stdout: '  --effort <level>  Effort level\n', stderr: '', exitCode: 0 };
+				if (cmd === '/usr/bin/claude' && args[0] === '--effort')
+					return {
+						stdout: 'claude-code/2.0.0\n',
+						stderr:
+							"\u001b[33mWarning: Unknown --effort value '__maestro_probe__' - ignoring it and using the default effort. Valid values: low, medium, high, xhigh, max.\u001b[39m\n",
+						exitCode: 0,
+					};
+				return { stdout: '', stderr: 'not found', exitCode: 1 };
+			});
+
+			detector.clearCache();
+			await detector.detectAgents();
+
+			expect(await detector.discoverConfigOptions('claude-code', 'effort')).toEqual([
+				'',
+				'low',
+				'medium',
+				'high',
+				'xhigh',
+				'max',
+			]);
+		});
+
 		it('falls back to static Claude effort levels when every discovery path fails', async () => {
 			// Durability guard: the CLI scraping is inherently fragile (Anthropic has
 			// reworded --help and the validation message more than once). If a future

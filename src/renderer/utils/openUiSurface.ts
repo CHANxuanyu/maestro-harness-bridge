@@ -114,13 +114,23 @@ export function openUiSurface(
 			actions.setDeleteWorktreeSession(session);
 			return { ok: true };
 		}
+		case 'checks-panel':
+		case 'follow-ups-panel':
 		case 'terminal-panel':
 		case 'tasks-panel':
 			if (!useSettingsStore.getState().newShell)
 				return { ok: false, error: 'This panel requires the new shell' };
 			useUIStore
 				.getState()
-				.setActiveRightTab(surface.id === 'terminal-panel' ? 'terminal' : 'tasks');
+				.setActiveRightTab(
+					surface.id === 'checks-panel'
+						? 'checks'
+						: surface.id === 'follow-ups-panel'
+							? 'follow-ups'
+							: surface.id === 'terminal-panel'
+								? 'terminal'
+								: 'tasks'
+				);
 			useUIStore.getState().setRightPanelOpen(true);
 			useUIStore.getState().setActiveFocus('right');
 			return { ok: true };

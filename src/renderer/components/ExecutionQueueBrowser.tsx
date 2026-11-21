@@ -1,3 +1,8 @@
+import {
+	isConversationAutomationPrompt,
+	readConversationAutomationPrompt,
+} from '../../shared/conversationAutomationPrompt';
+import { ConversationAutomationTurn } from './ConversationAutomationTurn';
 import React, { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
 	X,
@@ -298,7 +303,7 @@ export function ExecutionQueueBrowser({
 				run: sendNow,
 			});
 		}
-		if (onEditItem && item.type !== 'command') {
+		if (onEditItem && item.type !== 'command' && !isConversationAutomationPrompt(item.text ?? '')) {
 			menuActions.push({
 				id: 'edit',
 				label: 'Edit',
@@ -321,20 +326,21 @@ export function ExecutionQueueBrowser({
 				run: () => onToggleItemPause(session.id, item.id),
 			});
 		}
-		menuActions.push({
-			id: 'copy',
-			label: 'Copy',
-			icon: <Copy className="w-4 h-4" />,
-			run: () => {
-				const text =
-					item.type === 'command'
-						? [item.command, item.commandArgs].filter(Boolean).join(' ')
-						: (item.text ?? '');
-				safeClipboardWrite(text).then((ok) => {
-					if (ok) flashCopiedToClipboard();
-				});
-			},
-		});
+		if (!isConversationAutomationPrompt(item.text ?? ''))
+			menuActions.push({
+				id: 'copy',
+				label: 'Copy',
+				icon: <Copy className="w-4 h-4" />,
+				run: () => {
+					const text =
+						item.type === 'command'
+							? [item.command, item.commandArgs].filter(Boolean).join(' ')
+							: (item.text ?? '');
+					safeClipboardWrite(text).then((ok) => {
+						if (ok) flashCopiedToClipboard();
+					});
+				},
+			});
 	}
 
 	return (
@@ -495,7 +501,9 @@ export function ExecutionQueueBrowser({
 															: undefined
 													}
 													onEdit={
-														onEditItem && item.type !== 'command'
+														onEditItem &&
+														item.type !== 'command' &&
+														!isConversationAutomationPrompt(item.text ?? '')
 															? () => setEditing({ sessionId: session.id, item })
 															: undefined
 													}
@@ -718,6 +726,7 @@ function QueueItemRow({
 	// Read up to the first 4k characters and let CSS line-clamp cap the card at
 	// three lines. The native ellipsis fills the space without wrapping past the
 	// card, so longer messages show as much as fits rather than a hard 100-char cut.
+	const automation = !isCommand ? readConversationAutomationPrompt(item.text ?? '') : undefined;
 	const displayText = isCommand ? item.command : item.text?.slice(0, 4000);
 
 	// formatRelativeTime steps up through m / h / d and finally a date, so an
@@ -858,10 +867,10 @@ function QueueItemRow({
 						)}
 					</div>
 					<div
-						className={`mt-1 text-sm line-clamp-3 break-words ${isCommand ? 'font-mono' : ''}`}
+						className={`mt-1 text-sm ${automation ? '' : 'line-clamp-3'} break-words ${isCommand ? 'font-mono' : ''}`}
 						style={{ color: theme.colors.textMain }}
 					>
-						{displayText}
+						{automation ? <ConversationAutomationTurn marker={automation} /> : displayText}
 					</div>
 					{isCommand && item.commandDescription && (
 						<div className="text-xs mt-0.5" style={{ color: theme.colors.textDim }}>
@@ -957,27 +966,29 @@ function QueueItemRow({
 							>
 								<Trash2 className="w-4 h-4" />
 							</button>
-							<button
-								onClick={(e) => {
-									e.stopPropagation();
-									const text =
-										item.type === 'command'
-											? [item.command, item.commandArgs].filter(Boolean).join(' ')
-											: (item.text ?? '');
-									safeClipboardWrite(text).then((ok) => {
-										if (ok) {
-											setCopied(true);
-											if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
-											copyResetTimerRef.current = setTimeout(() => setCopied(false), 1500);
-										}
-									});
-								}}
-								className="p-1.5 rounded hover:bg-black/20 transition-all"
-								style={{ color: copied ? theme.colors.success : theme.colors.textDim }}
-								title="Copy to clipboard"
-							>
-								{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-							</button>
+							{!automation && (
+								<button
+									onClick={(e) => {
+										e.stopPropagation();
+										const text =
+											item.type === 'command'
+												? [item.command, item.commandArgs].filter(Boolean).join(' ')
+												: (item.text ?? '');
+										safeClipboardWrite(text).then((ok) => {
+											if (ok) {
+												setCopied(true);
+												if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+												copyResetTimerRef.current = setTimeout(() => setCopied(false), 1500);
+											}
+										});
+									}}
+									className="p-1.5 rounded hover:bg-black/20 transition-all"
+									style={{ color: copied ? theme.colors.success : theme.colors.textDim }}
+									title="Copy to clipboard"
+								>
+									{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+								</button>
+							)}
 						</div>
 					</div>
 				</div>

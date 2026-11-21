@@ -184,7 +184,7 @@ describe('activity and delivery', () => {
 		expect(screen.queryByTestId('activity-collapsed')).toBeNull();
 	});
 
-	it('opens Changes filtered to this turn and leaves absent plan and check slots empty', () => {
+	it('opens Changes filtered to this turn and omits checks when no check list exists', () => {
 		useSessionStore.setState({
 			sessions: [
 				createMockSession({ id: 's', activeTabId: 't', aiTabs: [createMockAITab({ id: 't' })] }),
@@ -211,7 +211,7 @@ describe('activity and delivery', () => {
 		expect(screen.getByTestId('turn-delivery').textContent).toBe('Changed 2 files · +9 -1');
 	});
 
-	it.each([0, null])('hides a zero-file delivery even with line counts %s', (count) => {
+	it('names a single changed file in the singular', () => {
 		render(
 			<TurnDeliveryBar
 				sessionId="s"
@@ -219,11 +219,29 @@ describe('activity and delivery', () => {
 				turnId="u"
 				textColor={mockTheme.colors.textDim}
 				plan={null}
-				delivery={{ files: 0, additions: count, deletions: count, paths: [] }}
+				delivery={{ files: 1, additions: 1, deletions: 1, paths: ['greet.cjs'] }}
 			/>
 		);
-		expect(screen.queryByTestId('turn-delivery')).toBeNull();
+		expect(screen.getByTestId('turn-delivery').textContent).toBe('Changed 1 file · +1 -1');
 	});
+
+	it.each([0, null])(
+		'hides a zero-file delivery without checks even with line counts %s',
+		(count) => {
+			render(
+				<TurnDeliveryBar
+					sessionId="s"
+					tabId="t"
+					turnId="u"
+					textColor={mockTheme.colors.textDim}
+					plan={null}
+					delivery={{ files: 0, additions: count, deletions: count, paths: [] }}
+				/>
+			);
+			// Nothing to report draws no row at all, so the transcript does not grow.
+			expect(screen.queryByTestId('turn-delivery')).toBeNull();
+		}
+	);
 
 	it('keeps plan and check results without a zero-file chip or absent-file placeholder', () => {
 		const deliveryProps = {
@@ -246,7 +264,8 @@ describe('activity and delivery', () => {
 			/>
 		);
 		expect(screen.getByTestId('turn-delivery')).toHaveTextContent('1/1 tasks');
-		expect(screen.queryByRole('button')).toBeNull();
+		expect(screen.queryByRole('button', { name: /Changed/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: /checks|passed|Assistant claims/ })).toBeNull();
 		rerender(
 			<TurnDeliveryBar {...deliveryProps} plan={null} checkResult={<span>Check evidence</span>} />
 		);
@@ -265,9 +284,10 @@ describe('activity and delivery', () => {
 				delivery={{ files: 2, additions: null, deletions: null, paths: ['a', 'b'] }}
 			/>
 		);
-		expect(screen.getByRole('button')).toHaveTextContent('Changed 2 files');
-		expect(screen.getByRole('button')).toHaveTextContent('Line counts unavailable');
-		expect(screen.getByRole('button')).not.toHaveTextContent('+0 -0');
+		const files = screen.getByRole('button', { name: /Changed 2 files/ });
+		expect(files).toHaveTextContent('Changed 2 files');
+		expect(files).toHaveTextContent('Line counts unavailable');
+		expect(files).not.toHaveTextContent('+0 -0');
 	});
 
 	it('explains a Claude 5 conversation without a task tool and preserves actual plans', () => {

@@ -1,5 +1,5 @@
 export interface NewShellPanelState {
-	tab: 'changes' | 'files' | 'terminal' | 'tasks' | 'web';
+	tab: 'checks' | 'follow-ups' | 'changes' | 'files' | 'terminal' | 'tasks' | 'web';
 	webUrl?: string;
 	webReload?: number;
 	terminalTabId?: string;
@@ -10,6 +10,8 @@ export interface NewShellPanelState {
 	changesTurnId?: string;
 }
 export const NEW_SHELL_PANEL_ACTIONS = [
+	'checks',
+	'follow-ups',
 	'changes',
 	'changes-files',
 	'changes-turns',
@@ -70,7 +72,11 @@ export function changeNewShellPanel(
 				? { open: action === 'open' }
 				: {
 						tab:
-							action === 'changes' || action === 'tasks' || action === 'web'
+							action === 'checks' ||
+							action === 'follow-ups' ||
+							action === 'changes' ||
+							action === 'tasks' ||
+							action === 'web'
 								? action
 								: action.startsWith('terminal')
 									? 'terminal'
@@ -82,13 +88,22 @@ export function changeNewShellPanel(
 
 /** Resolve the visible panel without overwriting the classic shell's preference. */
 export function shellRightPanelTab(
-	stored: 'files' | 'changes' | 'history' | 'autorun' | 'terminal' | 'tasks' | 'web',
+	stored:
+		| 'checks'
+		| 'follow-ups'
+		| 'files'
+		| 'changes'
+		| 'history'
+		| 'autorun'
+		| 'terminal'
+		| 'tasks'
+		| 'web',
 	newShell: boolean,
 	panel?: NewShellPanelState
 ) {
 	return newShell
 		? (panel?.tab ?? (stored === 'files' ? 'files' : 'changes'))
-		: ['changes', 'terminal', 'tasks', 'web'].includes(stored)
+		: ['checks', 'follow-ups', 'changes', 'terminal', 'tasks', 'web'].includes(stored)
 			? 'files'
 			: stored;
 }

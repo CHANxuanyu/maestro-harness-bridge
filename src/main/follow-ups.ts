@@ -30,8 +30,15 @@ export interface FollowUpDependencies {
 	userData: string;
 	now?: () => number;
 	commands?: FollowUpCommands;
-	gh?: (args: string[], cwd: string) => Promise<{ status: string; conclusion: string | null }>;
-	onError?: (error: unknown) => void;
+	gh?: (
+		args: string[],
+		cwd: string
+	) => Promise<{
+		status: string;
+		conclusion: string | null;
+		jobs?: { name: string; conclusion: string | null }[];
+	}>;
+	onError?: (error: unknown, context?: Record<string, unknown>) => void;
 }
 
 function compactExternalStatus(status: FollowUpExternalStatus): FollowUpExternalStatus {
@@ -55,6 +62,11 @@ function validateRegistration(input: FollowUpRegistration): void {
 	if (!validTarget || !input.reason?.trim() || !Number.isFinite(input.deadline))
 		throw new Error('Follow-up requires an exact target, reason and absolute deadline');
 	if (
+		input.pollIntervalMs !== undefined &&
+		(!Number.isFinite(input.pollIntervalMs) || input.pollIntervalMs <= 0)
+	)
+		throw new Error('Invalid follow-up poll interval');
+	if (
 		input.waitLimitMs !== undefined &&
 		(!Number.isFinite(input.waitLimitMs) || input.waitLimitMs <= 0)
 	)
@@ -76,7 +88,14 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 	const file = path.join(deps.userData, 'follow-ups.json');
 	const writes = createKeyedWriteQueue();
 	const listeners = new Set<(event: FollowUpFire) => void>();
-	const report = deps.onError ?? ((error: unknown) => logger.error(String(error), 'FollowUps'));
+	const report =
+		deps.onError ??
+		((error: unknown, context?: Record<string, unknown>) =>
+			logger.error(
+				error instanceof Error ? (error.stack ?? error.message) : String(error),
+				'FollowUps',
+				context
+			));
 	const gh =
 		deps.gh ??
 		(async (args: string[], cwd: string) => {
@@ -85,7 +104,11 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 			});
 			if (result.exitCode !== 0)
 				throw new Error(result.stderr || 'Cannot observe GitHub Actions; use a time condition');
-			return JSON.parse(result.stdout) as { status: string; conclusion: string | null };
+			return JSON.parse(result.stdout) as {
+				status: string;
+				conclusion: string | null;
+				jobs?: { name: string; conclusion: string | null }[];
+			};
 		});
 	let records: FollowUp[] | undefined;
 	let running = false;
@@ -105,6 +128,15 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 				}
 			);
 		} catch (error) {
+			report(error, {
+				stage: 'command-status',
+				processId,
+				followUps: records
+					?.filter(
+						(entry) => entry.condition.kind === 'command' && entry.condition.processId === processId
+					)
+					.map((entry) => ({ followUpId: entry.id, target: entry.target })),
+			});
 			return { state: 'unavailable', observedAt: now(), error: String(error) };
 		}
 	};
@@ -113,7 +145,7 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 		condition: Extract<FollowUpCondition, { kind: 'ci' }>
 	): Promise<FollowUpExternalStatus> => {
 		const result = await gh(
-			['run', 'view', condition.runId, '--json', 'status,conclusion'],
+			['run', 'view', condition.runId, '--json', 'status,conclusion,jobs'],
 			condition.cwd
 		);
 		if (
@@ -126,7 +158,15 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 		return {
 			state: result.status === 'completed' ? 'completed' : 'running',
 			observedAt: now(),
-			...result,
+			status: result.status,
+			conclusion: result.conclusion,
+			failingJob:
+				result.jobs
+					?.filter(
+						(job) => job.conclusion && !['success', 'skipped', 'neutral'].includes(job.conclusion)
+					)
+					.map((job) => job.name)
+					.join(', ') || undefined,
 		};
 	};
 	const load = async () => {
@@ -216,13 +256,30 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 		// Persist first. A crash between this write and delivery leaves a fired
 		// record for reconciliation, never a second automatic firing.
 		await save(next);
+		for (const event of events)
+			logger.info('Follow-up fired', 'FollowUps', {
+				stage: 'fire',
+				followUpId: event.followUp.id,
+				target: event.followUp.target,
+				kind: event.kind,
+				late: event.late,
+				running,
+				listeners: listeners.size,
+			});
 		if (!running) return;
 		for (const event of events)
 			for (const listener of listeners) {
+				const context = {
+					stage: 'listener',
+					followUpId: event.followUp.id,
+					target: event.followUp.target,
+				};
 				try {
-					listener(structuredClone(event));
+					void Promise.resolve(listener(structuredClone(event))).catch((error) =>
+						report(error, context)
+					);
 				} catch (error) {
-					report(error);
+					report(error, context);
 				}
 			}
 	};
@@ -255,7 +312,12 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 			timer = setTimeout(
 				() => {
 					void tick().catch((error) => {
-						report(error);
+						report(error, {
+							stage: 'tick',
+							pending: records
+								?.filter((entry) => entry.state === 'pending')
+								.map((entry) => ({ followUpId: entry.id, target: entry.target })),
+						});
 						schedule(FOLLOW_UP_POLL_MS);
 					});
 				},
@@ -265,17 +327,20 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 	const pollCi = (entry: FollowUp, epoch: number) => {
 		if (entry.condition.kind !== 'ci' || polling.has(entry.id)) return;
 		polling.add(entry.id);
-		nextPoll.set(entry.id, now() + FOLLOW_UP_POLL_MS);
+		nextPoll.set(entry.id, now() + (entry.pollIntervalMs ?? FOLLOW_UP_POLL_MS));
 		void ciStatus(entry.condition)
-			.catch(
-				(error: unknown): FollowUpExternalStatus => ({
+			.catch((error: unknown): FollowUpExternalStatus => {
+				report(error, { stage: 'observe', followUpId: entry.id, target: entry.target });
+				return {
 					state: 'unavailable',
 					observedAt: now(),
 					error: String(error),
-				})
-			)
+				};
+			})
 			.then((status) => updateStatus(entry.id, status, epoch))
-			.catch(report)
+			.catch((error) =>
+				report(error, { stage: 'poll', followUpId: entry.id, target: entry.target })
+			)
 			.finally(() => {
 				polling.delete(entry.id);
 				schedule();
@@ -318,7 +383,7 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 				(nextPoll.get(entry.id) ?? 0) > now()
 			)
 				continue;
-			nextPoll.set(entry.id, now() + FOLLOW_UP_POLL_MS);
+			nextPoll.set(entry.id, now() + (entry.pollIntervalMs ?? FOLLOW_UP_POLL_MS));
 			if (polling.has(entry.id)) continue;
 			if (entry.condition.kind === 'ci') pollCi(entry, epoch);
 		}
@@ -353,7 +418,7 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 					throw new Error('Follow-up id already exists');
 				await save([...current, entry]);
 			});
-			nextPoll.set(entry.id, now() + FOLLOW_UP_POLL_MS);
+			nextPoll.set(entry.id, now() + (entry.pollIntervalMs ?? FOLLOW_UP_POLL_MS));
 			if (running) await tick();
 			return structuredClone(entry);
 		},
@@ -372,6 +437,32 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 		list(): Promise<FollowUp[]> {
 			return writes.enqueue(file, async () => structuredClone(await load()));
 		},
+		async observe(id: string): Promise<FollowUpExternalStatus | undefined> {
+			const entry = (await writes.enqueue(file, load)).find((item) => item.id === id);
+			if (!entry) return undefined;
+			if (entry.condition.kind === 'command')
+				return compactExternalStatus(commandStatus(entry.condition.processId));
+			if (entry.condition.kind === 'ci') {
+				try {
+					return await ciStatus(entry.condition);
+				} catch (error) {
+					report(error, { stage: 'last-observation', followUpId: entry.id, target: entry.target });
+					return { state: 'unavailable', observedAt: now(), error: String(error) };
+				}
+			}
+			return entry.externalStatus;
+		},
+		async setDeadline(ids: string[], deadline: number): Promise<void> {
+			if (!Number.isFinite(deadline)) throw new Error('Invalid follow-up deadline');
+			await writes.enqueue(file, async () =>
+				save(
+					(await load()).map((entry) =>
+						ids.includes(entry.id) && entry.state === 'pending' ? { ...entry, deadline } : entry
+					)
+				)
+			);
+			schedule();
+		},
 		onFire(listener: (event: FollowUpFire) => void): () => void {
 			listeners.add(listener);
 			return () => {
@@ -387,7 +478,9 @@ export function createFollowUpStore(deps: FollowUpDependencies) {
 					if (entry.condition.kind === 'command' && entry.condition.processId === processId) {
 						void updateStatus(entry.id, status, epoch)
 							.then(() => schedule())
-							.catch(report);
+							.catch((error) =>
+								report(error, { stage: 'command', followUpId: entry.id, target: entry.target })
+							);
 					}
 			});
 			await tick();

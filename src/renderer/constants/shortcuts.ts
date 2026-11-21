@@ -99,6 +99,18 @@ export const DEFAULT_SHORTCUTS = {
 	help: { id: 'help', label: 'Show Shortcuts', keys: ['Meta', '/'] },
 	settings: { id: 'settings', label: 'Open Settings', keys: ['Meta', ','] },
 	agentSettings: { id: 'agentSettings', label: 'Open Agent Settings', keys: ['Alt', 'Meta', ','] },
+	goToChecks: {
+		id: 'goToChecks',
+		shell: 'new',
+		label: 'Open Checks Panel',
+		keys: ['Meta', 'Shift', '8'],
+	},
+	goToFollowUps: {
+		id: 'goToFollowUps',
+		shell: 'new',
+		label: 'Open Follow-ups Panel',
+		keys: ['Meta', 'Shift', '9'],
+	},
 	goToTasks: {
 		id: 'goToTasks',
 		shell: 'new',

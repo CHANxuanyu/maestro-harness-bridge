@@ -19,6 +19,8 @@
  * arithmetic (a real due date, a wake time) must use Date, not this module.
  */
 
+import type { AppLocale } from './i18n';
+
 /** Rungs on the ladder, largest to smallest. */
 export type DurationUnit = 'year' | 'month' | 'week' | 'day' | 'hour' | 'minute' | 'second';
 
@@ -35,18 +37,19 @@ interface UnitSpec {
 	readonly short: string;
 	readonly caps: string;
 	readonly long: string;
+	readonly zh: string;
 }
 
 // `mo` rather than `m` for month: `m` is already minute, and a string that can
 // mean either 60 seconds or 30 days is worse than no string at all.
 const UNITS: Record<DurationUnit, UnitSpec> = {
-	year: { ms: 31_536_000_000, short: 'y', caps: 'Y', long: 'year' },
-	month: { ms: 2_629_746_000, short: 'mo', caps: 'MO', long: 'month' },
-	week: { ms: 604_800_000, short: 'w', caps: 'W', long: 'week' },
-	day: { ms: 86_400_000, short: 'd', caps: 'D', long: 'day' },
-	hour: { ms: 3_600_000, short: 'h', caps: 'H', long: 'hour' },
-	minute: { ms: 60_000, short: 'm', caps: 'M', long: 'minute' },
-	second: { ms: 1_000, short: 's', caps: 'S', long: 'second' },
+	year: { ms: 31_536_000_000, short: 'y', caps: 'Y', long: 'year', zh: '年' },
+	month: { ms: 2_629_746_000, short: 'mo', caps: 'MO', long: 'month', zh: '个月' },
+	week: { ms: 604_800_000, short: 'w', caps: 'W', long: 'week', zh: '周' },
+	day: { ms: 86_400_000, short: 'd', caps: 'D', long: 'day', zh: '天' },
+	hour: { ms: 3_600_000, short: 'h', caps: 'H', long: 'hour', zh: '小时' },
+	minute: { ms: 60_000, short: 'm', caps: 'M', long: 'minute', zh: '分钟' },
+	second: { ms: 1_000, short: 's', caps: 'S', long: 'second', zh: '秒' },
 };
 
 /** Milliseconds in one of each unit. Exported so callers can compare spans without redefining `const DAY = 86400000`. */
@@ -87,6 +90,8 @@ export const DURATION_LADDER_HOURS = [
 ] as const satisfies readonly DurationUnit[];
 
 export interface HumanizeDurationOptions {
+	/** Localized, spaced labels. Omit to preserve the existing compact presets. */
+	locale?: AppLocale;
 	/** Rungs to use, largest first. Defaults to the full ladder. */
 	units?: readonly DurationUnit[];
 	/** How many rungs to print, largest first. Default 2. */
@@ -129,9 +134,15 @@ export interface HumanizeDurationOptions {
 	fallback?: string;
 }
 
-function renderUnit(value: number, unit: UnitSpec, style: DurationStyle): string {
+function renderUnit(
+	value: number,
+	unit: UnitSpec,
+	style: DurationStyle,
+	locale?: AppLocale
+): string {
+	if (locale === 'zh-CN') return `${value} ${unit.zh}`;
 	if (style === 'long') return `${value} ${unit.long}${value === 1 ? '' : 's'}`;
-	return `${value}${style === 'caps' ? unit.caps : unit.short}`;
+	return `${value}${locale ? ' ' : ''}${style === 'caps' ? unit.caps : unit.short}`;
 }
 
 /**
@@ -148,6 +159,7 @@ function renderUnit(value: number, unit: UnitSpec, style: DurationStyle): string
  */
 export function humanizeDuration(ms: number, options: HumanizeDurationOptions = {}): string {
 	const {
+		locale,
 		units,
 		maxUnits = 2,
 		style = 'short',
@@ -180,12 +192,17 @@ export function humanizeDuration(ms: number, options: HumanizeDurationOptions = 
 		if (value === 0 && !(keepZeroUnits && (parts.length > 0 || keepLeadingZero))) continue;
 		if (parts.length === 0) leadIndex = i;
 		else if (adjacentUnits && i !== leadIndex + 1) break;
-		parts.push(renderUnit(value, unit, style));
+		parts.push(renderUnit(value, unit, style, locale));
 		remaining -= value * unit.ms;
 	}
 
-	if (parts.length === 0) return fallback ?? renderUnit(0, smallest, style);
+	if (parts.length === 0) return fallback ?? renderUnit(0, smallest, style, locale);
 	return parts.join(separator);
+}
+
+/** Owner-facing limits and elapsed budgets: `6 s` / `6 秒`, `2 hours` / `2 小时`. */
+export function formatDurationForLocale(ms: number, locale: AppLocale): string {
+	return humanizeDuration(ms, { locale, style: ms < DURATION_MS.minute ? 'short' : 'long' });
 }
 
 /**

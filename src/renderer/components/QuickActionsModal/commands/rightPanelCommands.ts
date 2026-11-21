@@ -69,6 +69,18 @@ export function buildRightPanelCommands({
 		});
 		for (const [id, surface, label, shortcut] of [
 			[
+				'goToChecks',
+				'checks-panel',
+				'workflows.automation.checks',
+				useSettingsStore.getState().shortcuts.goToChecks,
+			],
+			[
+				'goToFollowUps',
+				'follow-ups-panel',
+				'workflows.automation.followUps',
+				useSettingsStore.getState().shortcuts.goToFollowUps,
+			],
+			[
 				'goToTerminal',
 				'terminal-panel',
 				'workflows.newShell.goToTerminal',

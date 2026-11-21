@@ -543,6 +543,145 @@ Show, stage, apply or inspect the shared native instruction profile
 | `--confirm <path>` | Approve this exact resolved file from status (repeatable) | `[]`    |
 | `--json`           | Output JSON including per-file states                     | -       |
 
+## `maestro-cli follow-up`
+
+Follow-ups
+
+## `maestro-cli follow-up add`
+
+Register follow-up
+
+| Option                      | Description                                            | Default |
+| --------------------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>`              | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`                | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`                    | Output JSON                                            | -       |
+| `--reason <text>`           | Reason for coming back                                 | -       |
+| `--after <seconds>`         | Come back after (seconds)                              | -       |
+| `--process <id>`            | App-observed command ID                                | -       |
+| `--ci <run-id>`             | GitHub Actions run ID                                  | -       |
+| `--cwd <path>`              | Project directory for CI                               | -       |
+| `--total-minutes <minutes>` | Total time limit                                       | -       |
+| `--wait-minutes <minutes>`  | Single wait                                            | -       |
+
+## `maestro-cli follow-up list`
+
+Follow-ups
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli follow-up cancel <id>`
+
+Cancel follow-up
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli follow-up extend`
+
+Extend 1 hour
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli follow-up stop`
+
+Stop following
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli checks`
+
+Checks
+
+## `maestro-cli checks set`
+
+Save check list
+
+| Option                   | Description                                            | Default |
+| ------------------------ | ------------------------------------------------------ | ------- |
+| `--agent <id>`           | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`             | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`                 | Output JSON                                            | -       |
+| `--command <command...>` | One check command per line                             | -       |
+
+## `maestro-cli checks run`
+
+Run checks
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli checks status`
+
+Checks
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli checks authorize <choice>`
+
+Allow the app to run check commands in this project
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+| `--check <id>` | Check ID                                               | -       |
+
+## `maestro-cli checks fix <mode>`
+
+Send failed checks back to the assistant?
+
+| Option                      | Description                                            | Default |
+| --------------------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>`              | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`                | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`                    | Output JSON                                            | -       |
+| `--total-minutes <minutes>` | Total time limit                                       | -       |
+
+## `maestro-cli checks answer <option>`
+
+Choose a specific boundary option
+
+| Option         | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `--agent <id>` | Exact agent ID; defaults to caller identity            | -       |
+| `--tab <id>`   | Exact conversation tab ID; defaults to caller identity | -       |
+| `--json`       | Output JSON                                            | -       |
+
+## `maestro-cli checks plan`
+
+Attempt ledger
+
+| Option              | Description                                             | Default |
+| ------------------- | ------------------------------------------------------- | ------- |
+| `--agent <id>`      | Exact agent ID; defaults to caller identity             | -       |
+| `--tab <id>`        | Exact conversation tab ID; defaults to caller identity  | -       |
+| `--json`            | Output JSON                                             | -       |
+| `--proposal <json>` | JSON with basis, difference, expectation and candidates | -       |
+
 ## `maestro-cli project`
 
 Manage project defaults for future conversations in the new interface
@@ -1567,13 +1706,14 @@ Return the current conversation window to one pane (requires the new shell)
 
 ## `maestro-cli tab panel [tab-id-or-action] [action]`
 
-New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
+New shell panel: checks, follow-ups, changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show
 
 | Option             | Description                                                                                                                                                               | Default |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `-a, --agent <id>` | Whose active tab, when &lt;tab-id> is "active"                                                                                                                            | -       |
 | `--json`           | Output as JSON (for scripting)                                                                                                                                            | -       |
 | `--terminal <id>`  | Terminal to select, close or restart; defaults to the conversation selection. Terminals still running on a previous host can only be closed from their owner conversation | -       |
+| `--turn <id>`      | Filter changes-turns to this turn; an empty string clears it                                                                                                              | -       |
 | `--filter <query>` | Filter the conversation file tree; an empty string clears it                                                                                                              | -       |
 | `--content <text>` | Set the remembered text file edit buffer before this action                                                                                                               | -       |
 | `--line <number>`  | Jump to a line in the remembered preview                                                                                                                                  | -       |

@@ -23,6 +23,47 @@ clicking in Maestro, an agent MUST be able to do through `maestro-cli`, through
 the same code path. A UI action ships with its CLI verb. This file records where
 that holds today, where it does not yet, and why.
 
+## B4 conversation checks and follow-ups (2026-11-18)
+
+All commands below accept `--json`. Owner CLI calls select exact `--agent <id>`
+and `--tab <id>`; an agent shell supplies those identities automatically. Neither
+path substitutes the active conversation. UI and CLI invoke
+`conversationAutomation:execute`, implemented by `createConversationAutomation()`
+in `src/main/conversation-automation.ts`; list-all uses `conversationAutomation:list`.
+The main runtime serves both shells. Cards and panel tabs belong to the new shell.
+
+| UI action                                                             | CLI                                                                                                 | Shared action                                                            |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Register timer, observed command, or CI follow-up                     | `follow-up add --reason <text> --after <seconds>` / `--process <id>` / `--ci <run-id> --cwd <path>` | `follow-add`                                                             |
+| Choose the total limit at registration                                | `follow-up add ... --total-minutes <minutes> [--wait-minutes <minutes>]`                            | `follow-add`, shared absolute budget                                     |
+| List follow-ups and delivery failures                                 | `follow-up list`                                                                                    | `status`; no target lists all saved conversations                        |
+| Cancel a pending follow-up                                            | `follow-up cancel <id>`                                                                             | `follow-cancel`                                                          |
+| Save or clear the check list                                          | `checks set [--command <command...>]`                                                               | `checks-set`                                                             |
+| Run checks / read app evidence                                        | `checks run` / `checks status`                                                                      | `checks-run` / `status`                                                  |
+| Authorize this project once                                           | `checks authorize project`                                                                          | `authorize`, project grant                                               |
+| Permit a command once / omit it                                       | `checks authorize once --check <id>` / `checks authorize reject --check <id>`                       | `authorize`, one-use grant or removal                                    |
+| Send back / I will look                                               | `checks fix auto [--total-minutes <minutes>]` / `checks fix manual`                                 | `fix`                                                                    |
+| Record attempt basis, difference, expectation and possible next steps | `checks plan --proposal <json>`                                                                     | `plan`, displayed in the attempt ledger                                  |
+| Choose a concrete boundary option                                     | `checks answer <zero-based-option>`                                                                 | `answer`                                                                 |
+| Extend one hour / stop following                                      | `follow-up extend` / `follow-up stop`                                                               | `extend` / `stop`                                                        |
+| Open Checks or Follow-ups from panel, menu, palette or shortcut       | `tab panel <tab> checks` / `follow-ups`; `open checks-panel` / `open follow-ups-panel`              | Existing `changeNewShellPanel()` and `openUiSurface()`                   |
+| Read a follow-up marker's observation                                 | `follow-up list --json`                                                                             | `status`, app-observed exit code, tail and CI fields                     |
+| Read the expiry decision from a follow-up row                         | `follow-up list --json`                                                                             | `status`, `expiryReport`; Extend/Stop still use the shared actions above |
+
+The observation fold and the link that scrolls/focuses the transcript expiry card
+are local presentation controls, like the existing tool folds and transcript
+reading position. There is no CLI verb for their expansion or scroll state;
+`follow-up list` exposes the same saved facts but does not move the desktop view.
+The expiry actions have one transcript host and keep their existing CLI parity.
+
+PRD 5.5 distinguishes owner actions from assistant actions: injected assistant
+callers may propose checks, record plans, register follow-ups and read status.
+They cannot run checks directly, write evidence, cancel waits, approve permissions,
+enable fixes or extend limits. The owner can perform these through either UI or
+CLI; only the app's check runner creates evidence. Scope review is conservative,
+not an OS sandbox: opaque commands require a one-use grant. Verification and
+native acceptance limitations are recorded in `docs/round2/b4-verification.md`.
+
 ## Team M1, M2 and M3 main-process contract (2026-11-18)
 
 These are the actions exposed for the separately implemented team renderer.

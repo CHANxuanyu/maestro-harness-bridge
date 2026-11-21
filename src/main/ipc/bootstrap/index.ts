@@ -11,6 +11,7 @@
  * separate follow-up).
  */
 
+import { registerConversationAutomation } from '../../conversation-automation-runtime';
 import {
 	registerTeamHandlers,
 	registerGitHandlers,
@@ -280,6 +281,7 @@ export function setupIpcHandlers(deps: IpcBootstrapDependencies): void {
 			deps.sessionsStore as unknown as import('../handlers/process/handle-spawn').SpawnHandlerDependencies['sessionsStore'],
 	});
 	registerTeamHandlers(team);
+	registerConversationAutomation(deps);
 	void team.start().catch((error) => logger.error(String(error), 'TeamScheduler'));
 	registerAgentSessionsHandlers({
 		getProcessManager: deps.getProcessManager,

@@ -846,6 +846,12 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.setEditAgentSession(activeSession);
 					trackShortcut('agentSettings');
 				}
+			} else if (
+				useSettingsStore.getState().newShell &&
+				(ctx.isShortcut(e, 'goToChecks') || ctx.isShortcut(e, 'goToFollowUps'))
+			) {
+				e.preventDefault();
+				openUiSurface(ctx.isShortcut(e, 'goToChecks') ? 'checks-panel' : 'follow-ups-panel');
 			} else if (useSettingsStore.getState().newShell && ctx.isShortcut(e, 'goToTasks')) {
 				e.preventDefault();
 				openUiSurface('tasks-panel');

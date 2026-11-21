@@ -32,6 +32,8 @@ interface MarkdownRendererProps {
 	onFileClick?: (path: string) => void;
 	/** Allow raw HTML passthrough via rehype-raw (sanitized with DOMPurify for XSS protection) */
 	allowRawHtml?: boolean;
+	/** Chip-render `@agent` and `@file` mentions (default on). */
+	mentionChips?: boolean;
 	/** SSH remote ID for remote file operations */
 	sshRemoteId?: string;
 	/** Apply Bionify reading-mode emphasis to prose text only when explicitly enabled */

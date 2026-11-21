@@ -387,7 +387,9 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 		// there before deciding the tab is truly gone.
 		const tabByItemId =
 			session.aiTabs.find((tab) => tab.id === item.tabId) ||
-			session.orphanedThinkingTabs?.find((tab) => tab.id === item.tabId);
+			(item.exactTarget
+				? undefined
+				: session.orphanedThinkingTabs?.find((tab) => tab.id === item.tabId));
 
 		if (!tabByItemId && item.tabId) {
 			logger.warn(
@@ -410,7 +412,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 			return false;
 		}
 
-		const targetTab = tabByItemId || getActiveTab(session);
+		const targetTab = tabByItemId || (item.exactTarget ? undefined : getActiveTab(session));
 
 		if (!targetTab) {
 			logger.error(

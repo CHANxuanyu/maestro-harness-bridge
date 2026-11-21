@@ -98,7 +98,7 @@ describe('catalog picker', () => {
 		render(<Harness catalog={data} />);
 		open();
 		expect(efforts().getAllByRole('option')).toHaveLength(2);
-		expect(modelRows().getByRole('option')).toHaveTextContent('Default unresolved');
+		expect(modelRows().getByRole('option')).toHaveTextContent('CLI default');
 	});
 	it('keeps vendor order, metadata and groups; folds older models and filters across groups', () => {
 		const data = catalog('claude-code');
@@ -140,7 +140,7 @@ describe('catalog picker', () => {
 			<Harness catalog={{ ...data, followDefault: { modelId: null, source: 'unresolved' } }} />
 		);
 		expect(
-			modelRows().getByRole('option', { name: /Follow default.*Default unresolved/ })
+			modelRows().getByRole('option', { name: /Follow default.*CLI default/ })
 		).toBeInTheDocument();
 	});
 

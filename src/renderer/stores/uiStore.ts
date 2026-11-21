@@ -519,7 +519,9 @@ export const useUIStore = create<UIStore>()((set, get) => ({
 			const tab = resolve(v, s.activeRightTab);
 			if (
 				useSettingsStore.getState().newShell &&
-				(tab === 'files' ||
+				(tab === 'checks' ||
+					tab === 'follow-ups' ||
+					tab === 'files' ||
 					tab === 'changes' ||
 					tab === 'terminal' ||
 					tab === 'tasks' ||

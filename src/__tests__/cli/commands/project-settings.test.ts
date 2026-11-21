@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { readSettingValue } from '../../../cli/services/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { projectSettings } from '../../../cli/commands/project-settings';
+import { projectSettings, projectSettingsTranslator } from '../../../cli/commands/project-settings';
 import { sendSimpleCommand } from '../../../cli/services/session-command';
 import { maskEnvValue } from '../../../shared/agentEnvironment';
 
@@ -34,6 +34,13 @@ describe('project settings CLI', () => {
 		vi.mocked(sendSimpleCommand).mockResolvedValue({ ok: true, result: snapshot });
 	});
 	afterEach(() => vi.restoreAllMocks());
+
+	it('can translate CLI help before a verified app data directory exists', () => {
+		vi.mocked(readSettingValue).mockImplementationOnce(() => {
+			throw new Error('No app data');
+		});
+		expect(projectSettingsTranslator()('workflows.automation.checks')).toMatch(/Checks|检查/);
+	});
 
 	it.each([
 		['en', 'Tool configuration must be a JSON object keyed by configuration ID.'],

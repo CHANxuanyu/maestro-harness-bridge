@@ -7,7 +7,11 @@ import {
 import { useSettingsStore } from '../../../renderer/stores/settingsStore';
 import { judgeAttempts } from '../../../shared/progressRules';
 import type { ConversationAutomationState } from '../../../shared/conversationAutomation';
-import { ConversationCheckDelivery } from '../../../renderer/components/ConversationCheckDelivery';
+import {
+	ConversationCheckDelivery,
+	userTurnWindows,
+} from '../../../renderer/components/ConversationCheckDelivery';
+import type { LogEntry } from '../../../renderer/types';
 import { useConversationAutomationStore } from '../../../renderer/stores/conversationAutomationStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { FollowUpsPanel } from '../../../renderer/components/FollowUpsPanel';
@@ -430,5 +434,40 @@ describe('conversation automation cards', () => {
 		expect(screen.getByRole('button', { name: '延长 1 小时' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: '不再跟进' })).toBeTruthy();
 		expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
+	});
+});
+
+describe('userTurnWindows', () => {
+	const log = (id: string, source: LogEntry['source'], timestamp: number): LogEntry => ({
+		id,
+		source,
+		timestamp,
+		text: id,
+	});
+
+	it('gives each user turn its start and the next user message as its end', () => {
+		const logs = [
+			log('u1', 'user', 100),
+			log('a1', 'ai', 150),
+			log('u2', 'user', 300),
+			log('a2', 'stdout', 350),
+		];
+		const index = userTurnWindows(logs);
+		expect(index.latest).toBe('u2');
+		expect(index.windows.get('u1')).toEqual({ start: 100, end: 300 });
+		expect(index.windows.get('u2')).toEqual({ start: 300 });
+		expect(index.windows.has('a1')).toBe(false);
+		expect(userTurnWindows([]).latest).toBe('');
+	});
+
+	it('scans a logs array once however many delivery bars ask', () => {
+		const logs = [log('u1', 'user', 100), log('a1', 'ai', 150)];
+		const first = userTurnWindows(logs);
+		expect(userTurnWindows(logs)).toBe(first);
+		const appended = [...logs, log('u2', 'user', 200)];
+		const next = userTurnWindows(appended);
+		expect(next).not.toBe(first);
+		expect(next.windows.get('u1')).toEqual({ start: 100, end: 200 });
+		expect(first.windows.get('u1')).toEqual({ start: 100 });
 	});
 });

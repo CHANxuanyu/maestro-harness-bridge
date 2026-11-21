@@ -3,10 +3,48 @@ import { patchNewShellPanel } from '../../shared/newShellPanel';
 import { useConversationAutomationStore } from '../stores/conversationAutomationStore';
 import { updateAiTab, useSessionStore } from '../stores/sessionStore';
 import { useT } from '../i18n';
+import type { LogEntry } from '../types';
 import {
 	ConversationAutomationCards,
 	hasTranscriptAutomationCards,
 } from './ConversationAutomationCards';
+
+interface UserTurnWindows {
+	/** Id of the newest user message, or '' when the conversation has none. */
+	latest: string;
+	/** Per user message: when it was sent, and when the next user message was. */
+	windows: Map<string, { start: number; end?: number }>;
+}
+
+const userTurnWindowCache = new WeakMap<readonly LogEntry[], UserTurnWindows>();
+const NO_LOGS: readonly LogEntry[] = [];
+
+/**
+ * Every finished turn draws a delivery bar, and each bar's store selector runs on
+ * every store write. Scanning the whole transcript inside the selector made a
+ * streaming 5000-message conversation pay one full scan per visible bar per flush
+ * (about 120 ms each 200 ms). One pass per logs array, shared by every bar.
+ */
+export function userTurnWindows(logs: readonly LogEntry[]): UserTurnWindows {
+	const cached = userTurnWindowCache.get(logs);
+	if (cached) return cached;
+	const windows: UserTurnWindows['windows'] = new Map();
+	let latest = '';
+	let previous: { start: number; end?: number } | undefined;
+	for (const log of logs) {
+		if (log.source !== 'user') continue;
+		if (previous && previous.end === undefined) previous.end = log.timestamp;
+		previous = undefined;
+		if (!windows.has(log.id)) {
+			previous = { start: log.timestamp };
+			windows.set(log.id, previous);
+		}
+		latest = log.id;
+	}
+	const result = { latest, windows };
+	userTurnWindowCache.set(logs, result);
+	return result;
+}
 
 interface CheckDeliveryTarget {
 	sessionId: string;
@@ -30,19 +68,12 @@ export function useConversationCheckDelivery({
 	// A primitive key, so a streaming reply does not re-render every delivery bar:
 	// the latest turn, and when this turn started and the next one began.
 	const turnWindow = useSessionStore((s) => {
-		const logs =
+		const { latest, windows } = userTurnWindows(
 			s.sessions.find((s) => s.id === sessionId)?.aiTabs.find((tab) => tab.id === tabId)?.logs ??
-			[];
-		let latest = '';
-		let start = '';
-		let end = '';
-		for (const log of logs) {
-			if (log.source !== 'user') continue;
-			if (start && !end) end = String(log.timestamp);
-			if (log.id === turnId) start = String(log.timestamp);
-			latest = log.id;
-		}
-		return `${latest}|${start}|${end}`;
+				NO_LOGS
+		);
+		const window = windows.get(turnId);
+		return `${latest}|${window?.start ?? ''}|${window?.end ?? ''}`;
 	});
 	const [latestTurnId, start, end] = turnWindow.split('|');
 	// A batch run from the panel has no turn of its own: it belongs to the turn that

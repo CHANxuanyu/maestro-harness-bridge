@@ -527,13 +527,21 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 			const launches = requests.filter(
 				(request) => request.provider === provider && request.cwd === binding.workspace
 			);
-			expect(launches).toHaveLength(state.seats[seat].usage.turns);
+			// PM reads in the dev workspace, so seats on one vendor can share a launch cwd.
+			const sharing = SEAT_ROLES.filter(
+				(other) =>
+					(state.config!.seats[other].tool === 'codex' ? 'codex' : 'claude') === provider &&
+					state.seats[other].binding!.workspace === binding.workspace
+			);
+			expect(launches).toHaveLength(
+				sharing.reduce((sum, other) => sum + state.seats[other].usage.turns, 0)
+			);
 			for (const launch of launches) {
 				const modelFlag = provider === 'codex' ? '-m' : '--model';
 				expect(launch.args).toContain(modelFlag);
-				expect(launch.args[launch.args.indexOf(modelFlag) + 1]).toBe(
-					configured.model ?? native.tools[provider].model
-				);
+				expect(
+					sharing.map((other) => state.config!.seats[other].model ?? native.tools[provider].model)
+				).toContain(launch.args[launch.args.indexOf(modelFlag) + 1]);
 				if (provider === 'claude') {
 					expect(launch.args[launch.args.indexOf('--max-turns') + 1]).toBe('8');
 					if (seat === 'pm')

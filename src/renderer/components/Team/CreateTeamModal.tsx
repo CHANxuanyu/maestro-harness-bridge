@@ -152,6 +152,7 @@ export function CreateTeamModal({
 			zIndex={900}
 			initialFocusRef={ideaRef}
 			width={720}
+			defaultSize={{ width: 720, height: 680 }}
 			portal
 			showHeader={false}
 			contentClassName="p-5 overflow-y-auto flex-1"
@@ -179,7 +180,7 @@ export function CreateTeamModal({
 					{SEAT_ROLES.map((seat) => (
 						<div
 							key={seat}
-							className="grid grid-cols-[64px_1.5fr_1fr] gap-2 items-start max-sm:grid-cols-1"
+							className="grid grid-cols-[max-content_1.5fr_1fr] gap-2 items-start max-sm:grid-cols-1"
 						>
 							<SeatTag seat={seat} />
 							<SeatPicker

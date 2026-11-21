@@ -26,6 +26,7 @@
  */
 
 import { isClaudeLimitNotice } from '../../shared/agentErrorPatterns';
+import { isConversationAutomationPrompt } from '../../shared/conversationAutomationPrompt';
 import { truncateCommand } from '../../shared/formatters';
 import { stripAnsiCodes } from '../../shared/stringUtils';
 import type { LogEntry } from '../types';
@@ -46,6 +47,11 @@ export function turnFailureReason(entry: Pick<LogEntry, 'text' | 'agentError'>):
  * getting appended to it wherever coalescing happens.
  */
 export function isSelfContainedCard(entry: LogEntry): boolean {
+	if (
+		entry.automationTurn ||
+		(entry.source === 'user' && isConversationAutomationPrompt(entry.text))
+	)
+		return true;
 	return Boolean(
 		// `!` command output card - text owned by services/shellCommand.ts
 		entry.shellCommand ||

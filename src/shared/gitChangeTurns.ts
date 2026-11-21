@@ -207,6 +207,8 @@ export function groupChangesByTurn(
 
 /** Exact boundary delta for paths with successful write-tool evidence. */
 export interface TurnDelivery {
+	/** Main-owned evidence correlation, independent of renderer persistence timing. */
+	checkRunId?: string;
 	files: number;
 	additions: number | null;
 	deletions: number | null;

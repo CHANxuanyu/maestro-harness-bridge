@@ -1,4 +1,5 @@
 import { applyPatch, diffLines } from 'diff';
+import { randomUUID } from 'crypto';
 import {
 	collectTurnWrites,
 	toolInputWritePaths,
@@ -570,6 +571,45 @@ interface GitTurnBoundary {
 	tools: Map<string, ChangeTurnEntry>;
 }
 const gitTurnBoundaries = new Map<string, GitTurnBoundary>();
+type GitTurnFinishedListener = (
+	processId: string,
+	delivery: TurnDelivery,
+	scope: { cwd: string; changed: boolean },
+	/** What `capture` returned when the turn ended, before a later turn could replace it. */
+	context?: unknown
+) => void;
+interface GitTurnFinishedSubscription {
+	accepts: (processId: string) => boolean;
+	capture?: (processId: string) => unknown;
+}
+const gitTurnFinishedListeners = new Map<GitTurnFinishedListener, GitTurnFinishedSubscription>();
+/** Where each begun turn runs, kept even when its baseline never forms. */
+const startedGitTurns = new Map<string, { cwd: string; notARepo?: boolean }>();
+
+/**
+ * Hear the end of every turn `accepts` tracks. `capture` runs synchronously at
+ * the exit, so its value belongs to the turn that ended even though the
+ * listener runs after the bounded measurement, when the next turn may be live.
+ */
+export function onGitTurnFinished(
+	listener: GitTurnFinishedListener,
+	accepts: (processId: string) => boolean = () => true,
+	capture?: (processId: string) => unknown
+): () => void {
+	gitTurnFinishedListeners.set(listener, { accepts, capture });
+	return () => {
+		gitTurnFinishedListeners.delete(listener);
+	};
+}
+
+export function needsAutomationGitBoundary(processId: string): boolean {
+	return [...gitTurnFinishedListeners.values()].some(({ accepts }) => accepts(processId));
+}
+
+interface TrackedGitTurnListener {
+	listener: GitTurnFinishedListener;
+	context: unknown;
+}
 const pendingGitTurns = new Map<
 	string,
 	{ valid: boolean; tools: Map<string, ChangeTurnEntry>; creating: Set<string> }
@@ -622,6 +662,8 @@ export async function beginGitTurn(
 	const measuring = measuringGitTurns.get(sessionId);
 	if (measuring) measuring.valid = false;
 	gitTurnBoundaries.delete(sessionId);
+	const started: { cwd: string; notARepo?: boolean } = { cwd };
+	startedGitTurns.set(sessionId, started);
 	const capture = {
 		valid: true,
 		tools: new Map<string, ChangeTurnEntry>(),
@@ -630,6 +672,7 @@ export async function beginGitTurn(
 	pendingGitTurns.set(sessionId, capture);
 	const boundary = await boundedGitTurnCapture(sessionId, capture, async () => {
 		const changes = await getGitChanges(cwd, remote, remoteCwd);
+		if (changes.notARepo) started.notARepo = true;
 		if (!capture.valid || changes.notARepo) return undefined;
 		if (changes.timedOut || changes.truncated) throw new Error('Turn baseline unavailable');
 		const head = await execGitReadOnly(['rev-parse', '--verify', 'HEAD'], cwd, remote, remoteCwd);
@@ -752,14 +795,87 @@ export function finishGitTurn(
 	if (previous) previous.valid = false;
 	const boundary = gitTurnBoundaries.get(sessionId);
 	gitTurnBoundaries.delete(sessionId);
-	if (!boundary || discard || !boundary.tools.size) return undefined;
+	const started = startedGitTurns.get(sessionId);
+	startedGitTurns.delete(sessionId);
+	if (discard) return undefined;
+	const listeners: TrackedGitTurnListener[] = [...gitTurnFinishedListeners]
+		.filter(([, { accepts }]) => accepts(sessionId))
+		.map(([listener, { capture }]) => ({ listener, context: capture?.(sessionId) }));
+	if (!boundary) {
+		// No baseline formed: still capturing at exit, sealed by an early edit, or
+		// unreadable. Automation still hears the end; outside Git there is nothing
+		// to compare, and anywhere else an unknown change is treated as a change.
+		if (!started || !listeners.length) return undefined;
+		const delivery: TurnDelivery = { ...summarizeTurnDelivery([]), checkRunId: randomUUID() };
+		for (const { listener, context } of listeners)
+			listener(sessionId, delivery, { cwd: started.cwd, changed: !started.notARepo }, context);
+		return Promise.resolve(delivery);
+	}
+	// Automation needs the end of every turn it tracks, including one with no tool writes.
+	if (!boundary.tools.size && !listeners.length) return undefined;
 	const capture = { valid: true };
 	measuringGitTurns.set(sessionId, capture);
-	return boundedGitTurnCapture(sessionId, capture, () => measureGitTurn(boundary, capture)).finally(
-		() => {
-			if (measuringGitTurns.get(sessionId) === capture) measuringGitTurns.delete(sessionId);
+	const measured = boundary.tools.size
+		? boundedGitTurnCapture(sessionId, capture, () => measureGitTurn(boundary, capture))
+		: Promise.resolve(undefined);
+	// Listeners run outside the bounded capture, so a slow measurement cannot drop the end.
+	const finished = listeners.length
+		? measured.then((delivery) => notifyGitTurnFinished(sessionId, boundary, delivery, listeners))
+		: measured;
+	return finished.finally(() => {
+		if (measuringGitTurns.get(sessionId) === capture) measuringGitTurns.delete(sessionId);
+	});
+}
+
+/** Tell automation a tracked turn ended and whether the workspace moved at all. */
+async function notifyGitTurnFinished(
+	sessionId: string,
+	boundary: GitTurnBoundary,
+	measured: TurnDelivery | undefined,
+	listeners: TrackedGitTurnListener[]
+): Promise<TurnDelivery> {
+	const delivery = measured ?? summarizeTurnDelivery([]);
+	delivery.checkRunId = randomUUID();
+	let changed = delivery.files > 0;
+	if (!changed) {
+		try {
+			const current = await getGitChanges(boundary.cwd, boundary.remote, boundary.remoteCwd);
+			// What cannot be read completely counts as changed, like a failed scan below.
+			if (current.truncated || current.timedOut) changed = true;
+			else if (!current.notARepo) {
+				const paths = new Set([
+					...boundary.patches.keys(),
+					...current.files.map((file) => file.path),
+				]);
+				for (const file of paths) {
+					const after = await getGitChangeDiff(
+						boundary.cwd,
+						file,
+						boundary.remote,
+						boundary.remoteCwd
+					);
+					if (
+						after.timedOut ||
+						after.tooLarge ||
+						(boundary.patches.get(file)?.diff ?? '') !== after.diff
+					) {
+						changed = true;
+						break;
+					}
+				}
+			}
+		} catch (error) {
+			// Unknown is treated as changed: running the checks again is cheaper than missing a change.
+			changed = true;
+			logger.warn('Turn change scan unavailable', 'GitChanges', {
+				sessionId,
+				error: String(error),
+			});
 		}
-	);
+	}
+	for (const { listener, context } of listeners)
+		listener(sessionId, delivery, { cwd: boundary.cwd, changed }, context);
+	return delivery;
 }
 
 async function measureGitTurn(

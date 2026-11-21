@@ -1,0 +1,14 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"allowJs": true,
+		"checkJs": false
+	},
+	"include": [
+		"native-follow-up.spec.ts",
+		"native-checks.spec.ts",
+		"../src/renderer/global.d.ts",
+		"../src/types"
+	]
+}

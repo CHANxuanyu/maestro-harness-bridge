@@ -49,6 +49,26 @@ describe('follow-ups', () => {
 		await vi.advanceTimersByTimeAsync(ms);
 		await store.list();
 	};
+	it.each(['throw', 'reject'])(
+		'reports a listener %s with the fired follow-up and target',
+		async (mode) => {
+			const onError = vi.fn();
+			const store = make({ onError });
+			const failure = new Error('Listener failed');
+			store.onFire(() => {
+				if (mode === 'throw') throw failure;
+				return Promise.reject(failure);
+			});
+			await store.start();
+			const entry = await store.register(input);
+			await advance(store, 20_000);
+			expect(onError).toHaveBeenCalledWith(failure, {
+				stage: 'listener',
+				followUpId: entry.id,
+				target: entry.target,
+			});
+		}
+	);
 
 	it('persists fired state before emitting to the exact target and never re-fires after restart', async () => {
 		const store = make();
@@ -192,7 +212,7 @@ describe('follow-ups', () => {
 		await store.list();
 		expect(gh).toHaveBeenCalledTimes(2);
 		expect(gh).toHaveBeenLastCalledWith(
-			['run', 'view', '482', '--json', 'status,conclusion'],
+			['run', 'view', '482', '--json', 'status,conclusion,jobs'],
 			root
 		);
 		expect(fired.mock.calls[0][0]).toMatchObject({

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { registerFollowUpCommand } from './commands/follow-up';
+import { registerChecksCommand } from './commands/checks';
 import { registerNewShellCli } from './commands/new-shell';
 import { NEW_SHELL_PANEL_ACTIONS } from '../shared/newShellPanel';
 import {
@@ -601,6 +603,9 @@ program
 	)
 	.option('--json', 'Output JSON including per-file states')
 	.action(aboutMe);
+
+registerFollowUpCommand(program);
+registerChecksCommand(program);
 
 const projectSettingsT = projectSettingsTranslator();
 
@@ -1707,7 +1712,7 @@ tabTargetOptions(tab.command('unsplit'))
 
 tabTargetOptions(tab.command('panel [tab-id-or-action] [action]'))
 	.description(
-		'New shell panel: changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
+		'New shell panel: checks, follow-ups, changes, changes-files, changes-turns, files, terminal, tasks, web, web-reload, web-external, terminal-select, terminal-close, terminal-restart, back, open, close, edit, preview or save; read with tab show'
 	)
 	.option(
 		'--terminal <id>',

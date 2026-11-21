@@ -32,6 +32,7 @@ import { resolveConfigDirKeyFromEnv } from './claudeSpawnCore';
 import { discoverModelsFromLocalConfigs } from './opencode-config';
 import { isWindows } from '../../shared/platformDetection';
 import { parseJsonWithBom } from '../../shared/jsonUtils';
+import { stripAnsiCodes } from '../../shared/stringUtils';
 import { capabilitySnapshots } from './capability-snapshot';
 import {
 	setOmpModelCatalog,
@@ -956,7 +957,9 @@ export class AgentDetector {
 						// inline, e.g. `--effort <level>  Effort level ... (low, medium, high, max)`.
 						const help = await execFileNoThrow(command, ['--help'], undefined, env);
 						if (help.exitCode === 0) {
-							const match = help.stdout.match(/--effort\s+<\w+>\s+.*?\(([^)]+)\)/);
+							// The CLI colors its help and warnings; a color code glued to the last
+							// level turned `max` into a `Max. [39m` option in the picker.
+							const match = stripAnsiCodes(help.stdout).match(/--effort\s+<\w+>\s+.*?\(([^)]+)\)/);
 							if (match) {
 								const levels = match[1]
 									.split(',')
@@ -984,7 +987,7 @@ export class AgentDetector {
 							undefined,
 							env
 						);
-						const probeOutput = `${probe.stderr}\n${probe.stdout}`;
+						const probeOutput = stripAnsiCodes(`${probe.stderr}\n${probe.stdout}`);
 						const probeMatch = probeOutput.match(
 							/--effort\b[^\n]*?(?:must be one of|valid values):\s*([^\n]+)/i
 						);

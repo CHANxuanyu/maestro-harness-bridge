@@ -24,6 +24,8 @@ const NEW_SHELL_SHORTCUT_KEYS: Readonly<Record<string, MessageKey>> = {
 	createTeam: 'workflows.team.new',
 	splitConversation: 'workflows.split.openRight',
 	toggleMode: 'workflows.newShell.newTerminalTab',
+	goToChecks: 'workflows.automation.checks',
+	goToFollowUps: 'workflows.automation.followUps',
 	goToFiles: 'workflows.newShell.goToFilesTab',
 	goToHistory: 'workflows.newShell.goToHistoryTab',
 	goToAutoRun: 'workflows.newShell.goToAutoRunTab',

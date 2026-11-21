@@ -91,15 +91,27 @@ export function enqueuePromptForTab(options: {
 	tabId: string;
 	text: string;
 	images?: string[];
+	/** Durable automation must never select a substitute tab. */
+	exactTarget?: boolean;
+	id?: string;
 }): QueuedItem | null {
 	const { sessionId, tabId, text, images } = options;
 	const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
 	if (!session) return null;
 
-	const tab = session.aiTabs?.find((t) => t.id === tabId) ?? getActiveTab(session);
+	const tab =
+		session.aiTabs?.find((t) => t.id === tabId) ??
+		(options.exactTarget ? undefined : getActiveTab(session));
 	if (!tab || useOperationStore.getState().tabReplacementLocks[tab.id]) return null;
 
 	const item = buildQueuedMessageItem({ session, tab, text, images });
+	if (options.exactTarget) {
+		item.exactTarget = true;
+		// Reasons and output tails may contain literal mentions, never routing instructions.
+		delete item.crossAgentMention;
+		delete item.crossAgentOnly;
+	}
+	if (options.id) item.id = options.id;
 	updateSessionWith(sessionId, (s) => ({
 		...s,
 		executionQueue: [...(s.executionQueue || []), item],

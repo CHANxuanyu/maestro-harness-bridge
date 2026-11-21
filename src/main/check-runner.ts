@@ -68,7 +68,9 @@ export function createCheckRunner(deps: CheckRunnerDependencies = {}) {
 				...(request.expectedExitCode !== undefined
 					? { expectedExitCode: request.expectedExitCode }
 					: {}),
-				outputTail: compactToolOutput(tail).output as string,
+				// Evidence is read as text everywhere (panels, team cards, CLI), so a
+				// colored test reporter must not leave escape codes in it.
+				outputTail: compactToolOutput(stripAnsiCodes(tail)).output as string,
 				truncated,
 				error,
 				...checkTestCounts(stripAnsiCodes(tail)),

@@ -17,6 +17,7 @@ export interface FollowUpExternalStatus {
 	exitCode?: number | null;
 	outputTail?: string;
 	error?: string;
+	failingJob?: string;
 }
 
 export interface FollowUpRegistration {
@@ -25,6 +26,7 @@ export interface FollowUpRegistration {
 	reason: string;
 	condition: FollowUpCondition;
 	waitLimitMs?: number;
+	pollIntervalMs?: number;
 	/** Shared absolute budget deadline. Re-registering must retain this value. */
 	deadline: number;
 }

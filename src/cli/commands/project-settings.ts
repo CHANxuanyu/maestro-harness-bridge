@@ -28,9 +28,13 @@ interface ProjectSettingsOptions {
 }
 
 export function projectSettingsTranslator() {
-	return getTranslator(
-		resolveAppLocale(readSettingValue('uiLanguage'), Intl.DateTimeFormat().resolvedOptions().locale)
-	);
+	let language: unknown;
+	try {
+		language = readSettingValue('uiLanguage');
+	} catch {
+		// Help and command registration must work before an app data directory exists.
+	}
+	return getTranslator(resolveAppLocale(language, Intl.DateTimeFormat().resolvedOptions().locale));
 }
 
 /** The CLI and project dialog call the same validation and Maestro store write. */

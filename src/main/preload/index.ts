@@ -39,6 +39,7 @@ import { createSpeckitApi, createOpenspecApi, createBmadApi } from './commands';
 import { createAutorunApi, createPlaybooksApi, createMarketplaceApi } from './autorun';
 import { createDebugApi, createDocumentGraphApi } from './debug';
 import { createTeamApi } from './team';
+import { createConversationAutomationApi } from './conversationAutomation';
 import { createGroupChatApi } from './groupChat';
 import { createCrossAgentApi } from './crossAgent';
 import { createStatsApi } from './stats';
@@ -88,6 +89,7 @@ const resolvedMaestroCliPath: string | null =
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('maestro', {
+	conversationAutomation: createConversationAutomationApi(),
 	// Settings API
 	settings: createSettingsApi(),
 

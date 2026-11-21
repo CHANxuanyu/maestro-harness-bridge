@@ -23,6 +23,7 @@ import { useSessionStore } from '../../../renderer/stores/sessionStore';
 import { createMockSession } from '../../helpers/mockSession';
 import { createMockAITab } from '../../helpers/mockTab';
 import type { Session } from '../../../renderer/types';
+import { resolveQueuedItemTarget } from '../../../renderer/utils/tabHelpers';
 
 function seed(overrides: Partial<Session> = {}): Session {
 	const session = createMockSession({
@@ -48,6 +49,48 @@ function currentQueue() {
 }
 
 describe('buildQueuedMessageItem', () => {
+	it('queues an exact automation target behind the running turn without changing focus or busy state', () => {
+		const session = seed({
+			state: 'busy',
+			aiTabs: [createMockAITab({ id: 'a' }), createMockAITab({ id: 'b', state: 'busy' })],
+		});
+		const item = enqueuePromptForTab({
+			sessionId: session.id,
+			tabId: 'b',
+			text: 'follow-up reason',
+			exactTarget: true,
+			id: 'follow:receipt',
+		});
+		expect(item).toMatchObject({ id: 'follow:receipt', tabId: 'b', exactTarget: true });
+		expect(useSessionStore.getState().sessions[0]).toMatchObject({
+			state: 'busy',
+			activeTabId: 'a',
+			executionQueue: [item],
+		});
+	});
+	it('refuses a missing exact target at enqueue and at drain, including closed orphan tabs', () => {
+		const session = seed();
+		expect(
+			enqueuePromptForTab({
+				sessionId: session.id,
+				tabId: 'missing',
+				text: 'private reason',
+				exactTarget: true,
+			})
+		).toBeNull();
+		const item = enqueuePromptForTab({
+			sessionId: session.id,
+			tabId: 'b',
+			text: 'private reason',
+			exactTarget: true,
+		})!;
+		expect(
+			resolveQueuedItemTarget(
+				{ ...session, aiTabs: [session.aiTabs[0]], orphanedThinkingTabs: [session.aiTabs[1]] },
+				item
+			)
+		).toBeNull();
+	});
 	beforeEach(() => {
 		planCrossAgentMentions.mockReset();
 		planCrossAgentMentions.mockReturnValue(null);
@@ -97,6 +140,19 @@ describe('buildQueuedMessageItem', () => {
 		const item = buildQueuedMessageItem({ session, tab: session.aiTabs[0], text: 'plain' });
 		expect(item.crossAgentMention).toBeUndefined();
 		expect(item.crossAgentOnly).toBeUndefined();
+	});
+	it('keeps mentions in follow-up reasons literal instead of consulting another agent', () => {
+		planCrossAgentMentions.mockReturnValue({ targetSessionIds: ['other'], suppressLocal: true });
+		seed();
+		const item = enqueuePromptForTab({
+			sessionId: 'session-1',
+			tabId: 'b',
+			text: '@Other is in the command output',
+			exactTarget: true,
+		});
+		expect(item).toMatchObject({ tabId: 'b', exactTarget: true });
+		expect(item?.crossAgentMention).toBeUndefined();
+		expect(item?.crossAgentOnly).toBeUndefined();
 	});
 });
 

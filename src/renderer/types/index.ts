@@ -73,6 +73,8 @@ export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'e
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 /** Changes, Terminal and Tasks belong to the new shell; History and Auto Run to classic. */
 export type RightPanelTab =
+	| 'checks'
+	| 'follow-ups'
 	| 'changes'
 	| 'files'
 	| 'history'
@@ -386,6 +388,8 @@ export interface LogEntry {
 	// card collapses all subsequent auto-retry attempts into a single live stat
 	// readout (attempt count, elapsed, next-retry countdown, Retry now / Stop).
 	retryOutageId?: string;
+	/** App-authored turn; source stays user to preserve the provider's turn boundaries. */
+	automationTurn?: import('../../shared/conversationAutomationPrompt').ConversationAutomationMarker;
 	// Command mode: anchors the live output card for a `!command` the user ran
 	// from the AI composer. The command never reaches the agent - Maestro runs
 	// it directly and streams stdout/stderr into `text`. See
@@ -533,6 +537,8 @@ export interface MentionHandoff {
 }
 
 export interface QueuedItem {
+	/** An automation delivery is never redirected after its conversation closes. */
+	exactTarget?: boolean;
 	id: string; // Unique item ID
 	timestamp: number; // When it was queued (for ordering)
 	tabId: string; // Target tab for this item

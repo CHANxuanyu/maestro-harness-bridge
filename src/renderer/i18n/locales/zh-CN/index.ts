@@ -1,3 +1,4 @@
+import { conversationAutomation } from './conversationAutomation';
 import newShellPanelsCopy from './newShellPanelsCopy';
 import newShellFeedbackCopy from './newShellFeedbackCopy';
 import newShellNavigationCopy from './newShellNavigationCopy';
@@ -18,6 +19,7 @@ import { workflowsSessions } from './workflowsSessions';
 const settings = { ...baseSettings, ...settingsFinish, ...settingsExtras };
 const workflows = {
 	...newShellPanelsCopy,
+	...conversationAutomation,
 	...newShellFeedbackCopy,
 	...newShellNavigationCopy,
 	...newShellComposerCopy,

@@ -82,6 +82,21 @@ export function HamburgerMenuContent({
 
 	return (
 		<div className="p-1">
+			{newShell &&
+				(['checks', 'follow-ups'] as const).map((panel) => (
+					<button
+						key={panel}
+						className="w-full px-3 py-2 text-left"
+						onClick={() => {
+							openUiSurface(`${panel}-panel`);
+							setMenuOpen(false);
+						}}
+					>
+						{t(
+							panel === 'checks' ? 'workflows.automation.checks' : 'workflows.automation.followUps'
+						)}
+					</button>
+				))}
 			{newShell && (
 				<button
 					type="button"

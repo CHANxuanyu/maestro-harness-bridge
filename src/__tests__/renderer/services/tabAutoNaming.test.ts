@@ -200,6 +200,32 @@ describe('requestWizardTabAutoName', () => {
 });
 
 describe('requestTabAutoNameForMessage', () => {
+	it('never names from automation, and uses the first real owner message after it', async () => {
+		const automation =
+			'[delivery:expiry:session:tab:7]\n[follow-up:budget:["session","tab"]:7:uuid] Shared budget';
+		const tab = createMockAITab({ id: 'tab-1', name: null, logs: [] });
+		const session = createMockSession({ aiTabs: [tab], activeTabId: tab.id });
+		seedStore(session);
+		requestTabAutoNameForMessage(session, tab.id, automation);
+		requestTabAutoName({ session, tabId: tab.id, prompt: automation });
+		expect(generateTabName).not.toHaveBeenCalled();
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].name).toBeNull();
+		// Native history can supply an old title made from the app prompt.
+		tab.name = automation.slice(0, 40);
+		tab.logs = [{ id: 'app', source: 'user', timestamp: 1, text: automation }];
+		seedStore(session);
+		requestTabAutoNameForMessage(session, tab.id, 'Repair CI for my project');
+		await flush();
+		expect(generateTabName).toHaveBeenCalledTimes(1);
+		expect(generateTabName.mock.calls[0][0]).toMatchObject({
+			userMessage: 'Repair CI for my project',
+		});
+		expect(useSessionStore.getState().sessions[0].aiTabs[0].name).toBe('Ingest Pipeline');
+		expect(collectNamingPrompt([automation, 'My first request'], automation)).toBe(
+			'My first request'
+		);
+	});
+
 	// Issue #1531: every path that hands a message to an AI tab (composer, queue
 	// drain, remote dispatch) goes through this, so a tab fed only by
 	// `maestro-cli dispatch` gets named the same way a typed one does.

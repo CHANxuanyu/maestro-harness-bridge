@@ -711,6 +711,7 @@ export function fileTimestampSlug(dateOrTimestamp: Date | number = new Date()): 
 
 export {
 	humanizeDuration,
+	formatDurationForLocale,
 	formatDurationHuman,
 	formatDurationCompact,
 	formatDurationVerbose,

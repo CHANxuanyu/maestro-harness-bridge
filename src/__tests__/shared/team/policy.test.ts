@@ -4,6 +4,7 @@ import {
 	discussionDecider,
 	missingOutputLocations,
 	pmMayChange,
+	repeatedSeatFault,
 	referenceVotes,
 	topicRejection,
 	teamEvidence,
@@ -23,7 +24,7 @@ import type {
 	TeamEvent,
 	TeamReport,
 } from '../../../shared/team/types';
-import { baseline, brief, check, ledger, proven, goodReports } from './fixtures';
+import { baseline, brief, check, ledger, proven, goodReports, type EventInput } from './fixtures';
 
 const opened = {
 	kind: 'discussion_opened' as const,
@@ -693,5 +694,47 @@ describe('a draft brief before the owner confirms it', () => {
 			trigger: 'standard-change',
 		});
 		expect(events.some((e) => e.kind === 'brief_published')).toBe(false);
+	});
+});
+
+describe('repeated seat faults', () => {
+	const fault = (fault: 'session-broken' | 'missing-report'): EventInput => ({
+		kind: 'member_fault',
+		seat: 'dev',
+		fault,
+		detail: 'Maximum token limit reached. Start a new session to continue.',
+	});
+	const workReport = (claimsComplete: boolean): EventInput => ({
+		kind: 'report_accepted',
+		actor: 'dev',
+		seat: 'dev',
+		dispatchId: 'w',
+		report: { ...goodReports.work, claimsComplete } as TeamReport,
+	});
+	// The M2-10 cycle: token limit, missing report, a repaired partial report, again.
+	const cycle = [fault('session-broken'), fault('missing-report'), workReport(false)];
+
+	it('flags the second identical fault when only partial work was reported in between', () => {
+		expect(repeatedSeatFault(ledger(...cycle), 'dev')).toBeUndefined();
+		expect(repeatedSeatFault(ledger(...cycle, fault('session-broken')), 'dev')).toMatchObject({
+			fault: 'session-broken',
+		});
+	});
+
+	it('starts over after a milestone or a different model', () => {
+		for (const reset of [
+			workReport(true),
+			{ kind: 'workspace_submitted', revision: 'abc', dispatchId: 'w' } as EventInput,
+			{
+				kind: 'seat_bound',
+				seat: 'dev',
+				workspace: '/w',
+				model: { tool: 'codex' },
+				reason: 'temporary',
+			} as EventInput,
+		])
+			expect(
+				repeatedSeatFault(ledger(...cycle, reset, fault('session-broken')), 'dev')
+			).toBeUndefined();
 	});
 });

@@ -682,6 +682,8 @@ export type LedgerEvent = EventBase &
 				configSource?: SeatRole;
 				detail?: string;
 				login?: boolean;
+				/** `repeated-fault`: the model keeps failing this seat; no reset will bring it back. */
+				cause?: 'quota' | 'repeated-fault';
 		  }
 		| { kind: 'substitute_took_over'; seat: SeatRole; model: SeatModel; temporary?: boolean }
 		| { kind: 'member_fault'; seat: SeatRole; fault: MemberFaultKind; detail?: string }

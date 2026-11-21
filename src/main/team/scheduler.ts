@@ -10,6 +10,7 @@ import {
 	discussionDecider,
 	referenceVotes,
 	pmMayChange,
+	repeatedSeatFault,
 	missingOutputLocations,
 	teamReadyForDemo,
 	teamTurnPermission,
@@ -330,9 +331,11 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			const source = entry.configSource ?? entry.seat;
 			const model = entry.model ?? state.config!.seats[entry.seat];
 			const sample = deps.quota?.(state.config!, source, model);
+			// A model that keeps failing this seat is not brought back by a quota reset.
 			const restored =
-				(!entry.login && entry.resetsAt !== undefined && now() >= entry.resetsAt) ||
-				(sample && sample.sampledAt > entry.at && !sample.exhausted);
+				entry.cause !== 'repeated-fault' &&
+				((!entry.login && entry.resetsAt !== undefined && now() >= entry.resetsAt) ||
+					(sample && sample.sampledAt > entry.at && !sample.exhausted));
 			if (restored) {
 				await append(id, {
 					kind: 'model_recovered',
@@ -519,14 +522,22 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					seat,
 					boundary: recovery.decision.boundaries[0],
 					boundaries: recovery.decision.boundaries,
-					title: `${seat} recovery would cross the deadline`,
-					body: 'The original model is unavailable and waiting for recovery would cross the deadline.',
+					title:
+						entry.cause === 'repeated-fault'
+							? `${seat} keeps failing on its model`
+							: `${seat} recovery would cross the deadline`,
+					body:
+						entry.cause === 'repeated-fault'
+							? 'The same fault recurred after fresh conversations without progress; another attempt would repeat it.'
+							: 'The original model is unavailable and waiting for recovery would cross the deadline.',
 					payload: {
 						type: 'escalation',
 						cause: 'availability',
 						stuck: entry.detail,
 						paths: [
-							'The original model is unavailable; another call would repeat the refusal.',
+							entry.cause === 'repeated-fault'
+								? 'Fresh conversations of this model failed the same way; a further retry would repeat it.'
+								: 'The original model is unavailable; another call would repeat the refusal.',
 							'No available authorized substitute remains.',
 							authorized(state, 'temporaryTakeover')
 								? 'Existing team models are also unavailable; waiting for reset needs more time.'
@@ -949,6 +960,19 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				detail: finished.reportError,
 				id: `${dispatch.dispatchId}:fault`,
 			});
+			const repeated = repeatedSeatFault((await load(id)).events, dispatch.seat);
+			const binding = (await stateFor(id)).seats[dispatch.seat].binding;
+			if (repeated && binding)
+				await append(id, {
+					kind: 'quota_exhausted',
+					actor: 'app',
+					seat: dispatch.seat,
+					model: binding.model,
+					configSource: binding.configSource ?? dispatch.seat,
+					cause: 'repeated-fault',
+					detail: `The same ${repeated.fault} recurred without progress: ${repeated.detail ?? 'no detail'}`,
+					id: `${dispatch.dispatchId}:repeated-fault`,
+				});
 		}
 	};
 	const launch = (data: RecordData, dispatch: Dispatch, recover = false) => {
@@ -1378,7 +1402,12 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 				);
 				continue;
 			}
-			const result = await deps.checks.run({ command: check.command, cwd, signal });
+			const result = await deps.checks.run({
+				command: check.command,
+				expectedExitCode: check.expectExit,
+				cwd,
+				signal,
+			});
 			const previous = (await stateFor(id)).checks.findLast((c) =>
 				c.covers.some((criterion) => check.covers.includes(criterion))
 			);
@@ -1409,6 +1438,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 					cwd,
 					covers: check.covers,
 					exitCode: result.exitCode,
+					expectedExitCode: check.expectExit ?? 0,
 					outputTail: result.outputTail,
 					durationMs: result.endedAt - result.startedAt,
 					evidenceId: result.id,
@@ -1429,7 +1459,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 	const batchPass = (state: TeamState, batchId: string) =>
 		state.checks
 			.filter((e) => e.batchId === batchId)
-			.every((e) => e.exitCode === 0 && !e.timedOut && !e.notRun);
+			.every((e) => e.exitCode === (e.expectedExitCode ?? 0) && !e.timedOut && !e.notRun);
 	const failures = (state: TeamState) => {
 		const latest = new Map(
 			state.checks
@@ -1442,7 +1472,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 		);
 		return [
 			...[...latest.values()]
-				.filter((c) => c.exitCode !== 0 || c.timedOut || c.notRun)
+				.filter((c) => c.exitCode !== (c.expectedExitCode ?? 0) || c.timedOut || c.notRun)
 				.map((c) =>
 					JSON.stringify([c.command, c.exitCode, c.timedOut, c.notRun, c.outputTail.trim()])
 				),
@@ -1864,6 +1894,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			!proposal.compromise &&
 			!observedExperiment;
 		const experiment = proposal.experiment;
+		let experimentEvidence: string | undefined;
 		if (experiment) {
 			const batchId = `discussion:${discussion.id}:${createHash('sha256').update(experiment.command).digest('hex')}`;
 			if (!state.checks.some((c) => c.batchId === batchId)) {
@@ -1898,6 +1929,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 						}
 						const result = await deps.checks.run({
 							command: experiment.command,
+							expectedExitCode: experiment.expectExit,
 							cwd,
 							timeoutMs: Math.max(
 								1,
@@ -1930,12 +1962,20 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			}
 			const result = state.checks.find((c) => c.batchId === batchId)!;
 			if (result.seq > proposal.seq && !result.notRun) {
-				await dispatch(id, state, opened.owner, 'proposal', {
-					discussionId: discussion.id,
-					round: round + 1,
-					note: `Experiment result: ${JSON.stringify(result)}. Decide from this observation; do not repeat the experiment.`,
-				});
-				return true;
+				// Everyone already agreed: the observation is evidence for the decision, not a
+				// reason for another round, unless it contradicts the exit code the proposal named.
+				const unanimous = responses.every((r) => r.result === 'agree');
+				const contradicts =
+					experiment.expectExit !== undefined && result.exitCode !== experiment.expectExit;
+				if (!unanimous || contradicts) {
+					await dispatch(id, state, opened.owner, 'proposal', {
+						discussionId: discussion.id,
+						round: round + 1,
+						note: `Experiment result: ${JSON.stringify(result)}. Decide from this observation; do not repeat the experiment.`,
+					});
+					return true;
+				}
+				experimentEvidence = `${proposal.proposal} Experiment \`${experiment.command}\` exited ${result.exitCode ?? 'unavailable'} (evidence ${result.evidenceId}).`;
 			}
 		}
 		if (needsExperiment) {
@@ -2027,7 +2067,7 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			insist || responses.some((r) => r.requestedResult === 'insist'),
 			decider === 'app'
 				? `Facts remain determined by recorded evidence. ${state.checks.map((c) => `${c.command}: exit ${c.exitCode ?? 'unavailable'}`).join('; ')}`
-				: undefined
+				: experimentEvidence
 		);
 		return true;
 	};
@@ -3007,22 +3047,30 @@ export function createTeamScheduler(deps: TeamSchedulerDependencies) {
 			for (const seat of SEAT_ROLES) {
 				const assigned = actions.filter((item) => item.owner === seat);
 				if (!assigned.length) continue;
+				const confirmed = !!state.baseline.confirmedVersion;
+				// A standard problem is settled by PM through standard changes, never routed to
+				// dev or QA as a fix (PRD 6.6 R1-10), so its decided steps stay message turns.
+				const standardIssue = assigned.some(
+					(item) =>
+						state.discussions.find((d) => d.id === item.discussionId)?.opened?.trigger ===
+						'standard-issue'
+				);
 				const turn =
-					!state.baseline.confirmedVersion ||
-					seat === 'pm' ||
-					assigned.some(
-						(item) =>
-							state.discussions.find((d) => d.id === item.discussionId)?.opened?.trigger ===
-							'standard-issue'
-					)
+					!confirmed || seat === 'pm' || standardIssue
 						? 'message'
 						: seat === 'qa'
 							? 'qa_prep'
 							: state.issues.some((i) => i.opened.issueKind === 'defect' && isOpenTeamIssue(i))
 								? 'fix'
 								: 'work';
+				const steps = assigned.map((item) => ({
+					step: item.title,
+					from: state.decisions.find((d) => d.discussionId === item.discussionId)?.decision,
+				}));
 				await dispatch(id, await stateFor(id), seat, turn, {
-					note: `Carry out the decided next steps: ${JSON.stringify(assigned)}. Before baseline confirmation, report preparation only; do not implement.`,
+					note: confirmed
+						? `Decided next steps for you (no message ids in this turn): ${JSON.stringify(steps)}. Carry them out within this turn's rules and report them as done or blocked.`
+						: `Decided next steps for you (no message ids in this turn): ${JSON.stringify(steps)}. The baseline is not confirmed yet: report preparation only; do not implement.`,
 				});
 			}
 			return;

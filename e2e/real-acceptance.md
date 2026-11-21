@@ -37,17 +37,27 @@ Claude 和 Codex 使用订阅登录快照。`prepareCredentials()` 只读来源�
 
 以下命令均需前述总开关。每次只运行一项，失败后先读附件，不自动重跑。
 
-| 场景               | 命令                                                                                                                                                                | 预计用户回合数与范围                                                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| A13/A15/A19 接力   | `MAESTRO_E2E_RELAY=1 npx playwright test --project=electron e2e/real-relay.spec.ts`                                                                                 | 3 回合：Claude 编辑、Codex 编辑、只读复核。另设 `MAESTRO_E2E_DEEPSEEK=1` 且有 key 时用 DeepSeek，否则用 Claude，并明确记录 DeepSeek 未覆盖 |
-| B10 Claude 主控    | `MAESTRO_E2E_CLAUDE_ORCHESTRATOR=1 npx playwright test --project=electron e2e/real-claude-orchestrator.spec.ts`                                                     | 3 回合：Claude 父任务、Codex 子任务、子任务插话。子任务运行时提交走普通队列，若已结束则继续同一原生会话                                    |
-| B9 Codex 派 Codex  | `MAESTRO_E2E_CODEX_ORCHESTRATOR=1 npx playwright test --project=electron e2e/real-codex-orchestrator.spec.ts --grep 'dispatches codex'`                             | 2 回合                                                                                                                                     |
-| B9 Codex 派 Claude | `MAESTRO_E2E_CODEX_ORCHESTRATOR=1 MAESTRO_E2E_CLAUDE_CHILD=1 npx playwright test --project=electron e2e/real-codex-orchestrator.spec.ts --grep 'dispatches claude'` | 2 回合；Claude 快照必须有效。旧 `MAESTRO_E2E_CHILD_PROVIDER` 不再选择用例，两种子任务现在分别命名                                          |
-| B8 自动交接        | `MAESTRO_E2E_AUTO_HANDOFF=1 npx playwright test --project=electron e2e/real-auto-handoff.spec.ts`                                                                   | 1 个真实 Codex 回合，加 1 个合成 Claude 限流错误。无需 Claude 登录                                                                         |
-| B2 任务面板        | `MAESTRO_E2E_TASKS_PANEL=1 npx playwright test --project=electron e2e/real-tasks-panel.spec.ts`                                                                     | 2 回合：Codex `update_plan`、Claude 5 系无任务来源；重启读回不调用模型                                                                     |
-| A12/A18 DeepSeek   | `MAESTRO_E2E_DEEPSEEK=1 npx playwright test --project=electron e2e/real-deepseek.spec.ts`                                                                           | `2 + N` 回合：文本、图片、每档非空 effort 各一次。当前定义回退有 5 档，共 7 回合；运行发现超过 8 档时在调用前失败，要求重审预算            |
+| 场景                | 命令                                                                                                                                                                | 预计用户回合数与范围                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| A13/A15/A19 接力    | `MAESTRO_E2E_RELAY=1 npx playwright test --project=electron e2e/real-relay.spec.ts`                                                                                 | 3 回合：Claude 编辑、Codex 编辑、只读复核。另设 `MAESTRO_E2E_DEEPSEEK=1` 且有 key 时用 DeepSeek，否则用 Claude，并明确记录 DeepSeek 未覆盖 |
+| B10 Claude 主控     | `MAESTRO_E2E_CLAUDE_ORCHESTRATOR=1 npx playwright test --project=electron e2e/real-claude-orchestrator.spec.ts`                                                     | 3 回合：Claude 父任务、Codex 子任务、子任务插话。子任务运行时提交走普通队列，若已结束则继续同一原生会话                                    |
+| B9 Codex 派 Codex   | `MAESTRO_E2E_CODEX_ORCHESTRATOR=1 npx playwright test --project=electron e2e/real-codex-orchestrator.spec.ts --grep 'dispatches codex'`                             | 2 回合                                                                                                                                     |
+| B9 Codex 派 Claude  | `MAESTRO_E2E_CODEX_ORCHESTRATOR=1 MAESTRO_E2E_CLAUDE_CHILD=1 npx playwright test --project=electron e2e/real-codex-orchestrator.spec.ts --grep 'dispatches claude'` | 2 回合；Claude 快照必须有效。旧 `MAESTRO_E2E_CHILD_PROVIDER` 不再选择用例，两种子任务现在分别命名                                          |
+| B8 自动交接         | `MAESTRO_E2E_AUTO_HANDOFF=1 npx playwright test --project=electron e2e/real-auto-handoff.spec.ts`                                                                   | 1 个真实 Codex 回合，加 1 个合成 Claude 限流错误。无需 Claude 登录                                                                         |
+| B2 任务面板         | `MAESTRO_E2E_TASKS_PANEL=1 npx playwright test --project=electron e2e/real-tasks-panel.spec.ts`                                                                     | 2 回合：Codex `update_plan`、Claude 5 系无任务来源；重启读回不调用模型                                                                     |
+| A12/A18 DeepSeek    | `MAESTRO_E2E_DEEPSEEK=1 npx playwright test --project=electron e2e/real-deepseek.spec.ts`                                                                           | `2 + N` 回合：文本、图片、每档非空 effort 各一次。当前定义回退有 5 档，共 7 回合；运行发现超过 8 档时在调用前失败，要求重审预算            |
+| RT 小任务（M1）     | `MAESTRO_E2E_REAL=1 MAESTRO_E2E_TEAM=1 npx playwright test --project=electron e2e/real-team.spec.ts --grep 'team small task' --reporter=list`                       | 20 个团队回合上限；PM = Claude、开发 = Codex、QA = Claude；修复 clamp 函数并补 README                                                      |
+| RT 中等任务（后续） | `MAESTRO_E2E_REAL=1 MAESTRO_E2E_TEAM=1 npx playwright test --project=electron e2e/real-team.spec.ts --grep 'team medium task' --reporter=list`                      | 40 个团队回合上限；同一岗位配置；两命令 CLI、输入校验、多文件测试与文档，PM 判断真实 usage 输出是否清楚                                    |
 
-回合数不是 HTTP 请求数或固定金额：工具续接和提供方内部请求可能增加用量。提示词限定微型项目、短回答和工具次数；Claude 每次原生启动设 `--max-turns 8`，转发器另限制每个配置可启动的用户回合数。应用错误重试、自动命名、历史摘要、Playwright 重试均关闭。Codex 提示词限制工具调用数，并由测试超时终止；没有虚构 Codex 不支持的硬性工具次数参数。父任务轮询只读 Maestro，不产生额外模型请求。
+回合数不是 HTTP 请求数或固定金额：工具续接和提供方内部请求可能增加用量。提示词限定微型项目、短回答和工具次数；Claude 每次原生启动设 `--max-turns 8`，转发器另限制每个配置可启动的用户回合数。普通对话的应用错误重试、自动命名、历史摘要、Playwright 重试均关闭。Codex 提示词限制工具调用数，并由测试超时终止；没有虚构 Codex 不支持的硬性工具次数参数。父任务轮询只读 Maestro，不产生额外模型请求。
+
+RT 两项分别用 grep 运行，不要一次运行整份文件。沿用上面的 Claude keychain 或 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 只读快照和显式版本、模型设置；不需要第三家密钥。第三家模型：**待补覆盖**，不计为已通过。中等任务只是后续验收入口，本次编写不代表 M2/M3 或 PRD 6.13 的同条件对照研究已完成。
+
+团队通过 `maestro-cli team start` 建立，不设截止时间，显式传入 `--turns 20` 或 `--turns 40` 和 `--allow checks,push,pr,temp`。临时仓库没有 remote，任务不需要 push 或 PR。测试只在卡片出现后调用 `team baseline confirm`、`team accept` 或 `team answer`，平时只读 `team status --json` 与 `team get --json`；不调用 `team say`，不发继续或催促。默认只允许基线和验收两张卡。团队按 PRD R1 第 4 条把改写标准或改证明方式的标准变更交给老板时，测试选卡片推荐的选项（推荐从不扩大范围），并计入老板介入次数。预算确实耗尽时记录边界、用 CLI 回答停止并让验收失败，不加预算、不接受遗留项；其他意外卡片记录原文和当时状态后失败，不自动批准。单个回合的墙钟上限是 10 分钟，与调度器判定成员停滞的时间一致。
+
+每个岗位的厂商用 `MAESTRO_E2E_TEAM_PM`、`MAESTRO_E2E_TEAM_DEV`、`MAESTRO_E2E_TEAM_QA`（`claude-code` 或 `codex`）选择，模型默认取该厂商的 `MAESTRO_E2E_*_MODEL`，可以用 `MAESTRO_E2E_TEAM_DEV_MODEL` 这类变量单独指定，例如让开发用较轻的模型，观察 PM 评审打回（路线图 M2-10）。测试结束时的 `team stop` 是清理动作，单独记录，不混入老板介入次数。
+
+RT 的脚本和 Playwright 不自动重跑失败调用。团队调度器自身的单次失败重试、补报告等有界恢复属于被测产品行为，每次真实启动都占用同一份跨岗位、跨厂商的 20/40 次硬上限，并记录原始回合与恢复关系；不在测试里再实现恢复。单个成员回合上限 4 分钟，小任务总墙钟上限 30 分钟，中等任务 60 分钟，另留 2 分钟清理。连续超过 2 分钟没有工作成员、登记等待或老板卡片时，按调度器缺陷失败；现状里的 “Scheduler to wake the PM” 占位提示不算登记等待。等待和检查轮询不产生模型调用。
 
 ## 证据与判定
 
@@ -60,6 +70,9 @@ Claude 和 Codex 使用订阅登录快照。`prepareCredentials()` 只读来源�
 - Claude 一半要求显式选择 5 系模型，例如 `MAESTRO_E2E_CLAUDE_MODEL=claude-sonnet-5-5`；调用前拒绝 4 系配置，并核对原生记录里的模型。整个回合用 DOM 观察器检查没有任务条目和页签计数，断言现有的“工具尚未提供任务清单”说明，重启后复验。场景不再设置 `CLAUDE_CODE_ENABLE_TASKS=false`，运行前也应清除终端继承的该覆盖。旧 4 系 TodoWrite 验收依赖场景自己设置这个开关，不代表产品默认行为，本场景不再保留该分支；不新增 TaskCreate 解析。
 - DeepSeek：本地透明 HTTP 转发器仍请求预设的官方端点，只记录模型、图片数量、thinking、effort 和状态码，不记录请求头、密钥或图片字节。`accepted` 同时要求 HTTP 成功、原生退出成功和预期回答。图片和 effort 拒绝是诊断结果，会继续测下一独立回合；基线文本失败则整项失败。`effortChangedRequest` 比较实际出站参数，不把 argv 变化冒充服务端生效。当前 DeepSeek 输入栏隐藏 effort，本场景通过已有 `tab effort` 逐项探测 Claude harness 能力定义/发现提供的档位，并记录这个差异；不修改能力表。报告通过仅代表采集完成，不能把拒绝项写成能力已支持。
 
+- 团队：`real-acceptance.json` 持续检查点保存源码 commit、应用版本与已构建 main/CLI 文件哈希、Node 和原生 CLI 版本、请求模型、原生记录提供的实际模型、三个岗位，以及完整台账和现状变化。逐回合记录岗位、类型、耗时、输入/输出 token、退出码、补报告与重试关联；无用量的回合保留 `null`，总 token 不完整时也是 `null`，同时保留已知用量和覆盖回合数。另记老板卡片、所越边界、选项、操作时间、QA 问题、PM 打回、自动恢复、应用检查的命令/cwd/退出码/输出/证据 ID、汇总统计、总墙钟时间和任务分支 diff。中等任务另列讨论、质询回应、有争议决定与每轮 PM 评审，零次也如实记录，不用伪造的讨论填空。
+- 团队成功要求应用自己的 `check_run` 在最终提交上通过，不能以开发的完成声明替代；QA 验证、问题复验和 PM 评审有台账证据。小任务仅开发分支里的源文件与 README 改动，原项目和契约测试保持不变；QA 的独立测试只在 QA 工作区的 `qa/`。中等任务还要求应用捕获的 `--help` 输出与 `usage.txt` 完全相符，PM 对带 `experience: true` 的标准给出引用真实输出的评审。老板操作、真实启动数量、CLI 用量与台账统计逐项对照。失败保留最后一个检查点与可取得的转录模型信息，随后停团队、关应用、删除临时项目和账户，不保留认证文件。
+
 这些是当前源码的开发构建验收，不是安装包验收，也不替代全天真人使用。任务面板的 CLI 清单读回和来源嵌套等产品缺口不在本测试任务里改动。
 
 ## 不调用真实模型的检查
@@ -67,11 +80,11 @@ Claude 和 Codex 使用订阅登录快照。`prepareCredentials()` 只读来源�
 ```sh
 npm run test:e2e:fixtures
 npx tsc -p e2e/tsconfig.real-acceptance.json --noEmit
-MAESTRO_E2E_REAL=0 npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek).spec.ts' --reporter=list
-MAESTRO_E2E_REAL=1 MAESTRO_E2E_SMOKE=1 npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek).spec.ts' --reporter=list
+MAESTRO_E2E_REAL=0 npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek|team).spec.ts' --reporter=list
+MAESTRO_E2E_REAL=1 MAESTRO_E2E_SMOKE=1 MAESTRO_E2E_TEAM=1 npx playwright test --project=electron 'e2e/real-(relay|claude-orchestrator|codex-orchestrator|auto-handoff|tasks-panel|deepseek|team).spec.ts' --reporter=list
 ```
 
-后两条各应显示 7 个 skipped，不启动 Electron。`npm run test:e2e` 和 `npm run test:e2e:real-smoke` 默认选择 `--project=native`，本批 `real-*` 不在该项目内；手工选择 electron 项目时仍受上述 skip 保护。不要把跳过记为真实通过。
+后两条各应显示 9 个 skipped，不启动 Electron。`npm run test:e2e` 和 `npm run test:e2e:real-smoke` 默认选择 `--project=native`，本批 `real-*` 不在该项目内；手工选择 electron 项目时仍受上述 skip 保护。不要把跳过记为真实通过。
 
 ## Codex 计划重启的合成回归
 

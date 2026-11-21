@@ -20,8 +20,18 @@ export function TeamDecisions({
 	const decision = (entry: TeamState['decisions'][number]) => {
 		const discussion = state.discussions.find((value) => value.id === entry.discussionId);
 		return (
-			<div key={entry.id} className="team-item" data-decision={entry.id}>
-				<p>{entry.decision}</p>
+			<div
+				key={entry.id}
+				className="team-item"
+				data-decision={entry.id}
+				data-superseded={entry.supersededByBaseline ?? undefined}
+			>
+				<p className={entry.supersededByBaseline ? 'team-dim' : undefined}>{entry.decision}</p>
+				{entry.supersededByBaseline && (
+					<p className="team-dim">
+						{t('workflows.team.supersededByBaseline', { version: entry.supersededByBaseline })}
+					</p>
+				)}
 				<p className="team-dim">
 					{t('workflows.team.decider', { seat: t(`workflows.team.${entry.decider}`) })}
 				</p>

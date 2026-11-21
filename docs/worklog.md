@@ -1,5 +1,17 @@
 # 分支工作记录
 
+## 2026-11-21：M2-10 真实运行（开发改用较轻模型）
+
+为了观察 PM 打回检查全过但产出差的情况，开发席位改用 Claude Haiku 4.5，PM 与 QA 用 Codex（gpt-6.2-sol）。第一次运行（提交 `c538d81c2`）测出一个产品缺陷：Haiku 每个工作回合都达到会话 token 上限，应用每次开新会话后都记为已恢复，同一故障循环 5 次、25 个回合，接管顺序从未触发；已在 `codex/round2-team-efficiency` 修复（同一成员在两次实质进展之间第二次出现同类故障即登记为本团队不可用，转入替补、授权内临时接任、老板决定的顺序）。第二次运行（提交 `998497c5c`）：第二次会话损坏后登记反复故障，Codex 在新会话中临时接任开发，随后 QA 验证、PM 评审通过、演示与验收，16 个回合，老板只确认基线与验收；本次因验收脚本中尚未考虑接任的启动计数断言失败，断言已改为按每次派发记录的绑定核对，并用 V-1 通过的证据离线验证。M2-10 的结论：范围内分歧由团队自己谈成，在 V-1 第 4 至第 7 次真实运行中出现（讨论由 PM 按层级结案，没有老板卡片）；检查全过但产出差被 PM 打回、连续两次打回后收敛，两次专门设计的真实运行都没有出现（PM 两次都直接通过），仍只有合成场景覆盖，记为未完成。
+
+## 2026-11-21：V-1 真实中等任务通过
+
+`e2e/real-team.spec.ts --grep 'team medium task'`，提交 `c538d81c2`（主线含 B4，加两轮团队效率修复）。PM 与开发为 Codex（codex-cli 0.171.0-alpha.13，gpt-6.2-sol），QA 为 Claude Code 2.1.317（Sonnet 5.5）。结果：通过，12 个回合（预算 40），5.4 分钟，约 137 万 token，Claude 部分 0.43 美元（Codex 走订阅，应用不计费用）；老板只做了确认基线和验收两次，没有发消息；0 场讨论，0 次 PM 打回，0 个 QA 问题。同一配置此前 6 次失败的原因与处理：PM 的 Codex 回合超过脚本原定的 4 分钟（脚本上限改为与调度器一致的 10 分钟）；团队把改写标准的变更正确地交给老板，脚本不认这类卡（脚本改为按卡片推荐作答并计入介入）；基线后浪费 23 回合（四处产品修复）；基线前浪费约 24 回合（草稿需求的质询点交给 PM、PM 的修改直接成为新版本）；脚本中按问题类型、快照产出、M3 统计字段和共用工作区的启动计数四处过时断言。每次运行的台账另存于本机证据目录，不入库。
+
+## 2026-11-20：团队效率修复（第五次真实中等任务）
+
+真实中等任务第五次运行在基线后用了 23 个回合仍未交付。Codex 先完成了基线取代旧决定和期望退出码的主体，额度用尽后由 Opus 接手，补完实验结案规则、结论派发的回合类型与提示、界面显示和回归测试；中途尝试用 agy 接手，30 分钟没有产出后停止。命令：`npx vitest run src/__tests__/shared/team src/__tests__/main/team src/__tests__/renderer/components/Team src/__tests__/cli/commands/team.test.ts src/__tests__/shared/progressRules.test.ts src/__tests__/main/check-runner.test.ts` 584 项通过；`npm run lint`、`npx tsc -p e2e/tsconfig.team.json --noEmit` 通过。原生场景和真实重跑结果见下一段。
+
 ## 2026-11-20：团队 PR 的 Windows 与 Linux 原生 CI
 
 PR 97 在 `21520dda5` 上 Windows 两个分片 12 项失败、Linux 原生任务两项超时后被 75 分钟上限取消。Windows：检查运行器把 `cmd /c` 找不到命令（退出码 1 和 cmd 的提示行）记为未运行；团队测试改为按主机解析账号目录、固定 `core.autocrlf=false`、Windows 上不用含换行的文件名、先删除隐藏的 `.git` 再写；原生临时目录用原生 realpath 展开 8.3 短名。Linux：强制退出改为杀掉 Electron 进程组（`NativeApp.forceQuit()`），Playwright 要等标准输出全部关闭才报告退出，只杀主进程时 Linux 辅助进程仍握着管道。本地 macOS 在旧提交和新提交上这两个场景都通过（11 到 14 秒），Linux 的原因据 Playwright 源码推断，以下一轮 CI 为准。原生任务上限改为 120 分钟，超时取消时也上传 `e2e-results/`。命令：团队相关单测 21 个文件 572 项通过；`npm run lint` 通过；`node scripts/native-e2e.mjs e2e/native-team.spec.ts e2e/native-team-m3.spec.ts` 结果见 PR 评论。

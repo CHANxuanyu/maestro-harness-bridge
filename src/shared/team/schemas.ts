@@ -11,6 +11,7 @@ export type ReportSchema =
 	  }
 	| { type: 'boolean' }
 	| { type: 'number'; minimum?: number }
+	| { type: 'integer' }
 	| { type: 'null' }
 	| { type: 'array'; items: ReportSchema; minItems?: number }
 	| {
@@ -133,10 +134,11 @@ const briefProperties = {
 		object(
 			{
 				command: text,
+				expectExit: { type: 'integer' },
 				covers: strings(1),
 				boundary: choice('outside-workspace', 'external-write'),
 			},
-			['boundary']
+			['boundary', 'expectExit']
 		)
 	),
 };
@@ -277,9 +279,10 @@ export const REPORT_SCHEMAS: Record<TeamReport['type'], ReportSchema> = {
 					command: text,
 					basis: text,
 					expected: text,
+					expectExit: { type: 'integer' },
 					boundary: choice('outside-workspace', 'external-write'),
 				},
-				['boundary']
+				['boundary', 'expectExit']
 			),
 			options: array(
 				object({ id: text, label: text, cost: text, recommended: boolean }, [

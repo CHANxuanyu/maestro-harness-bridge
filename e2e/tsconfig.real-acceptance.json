@@ -8,6 +8,7 @@
 	"include": [
 		"native-codex-plan-restart.spec.ts",
 		"real-relay.spec.ts",
+		"real-team.spec.ts",
 		"real-claude-orchestrator.spec.ts",
 		"real-codex-orchestrator.spec.ts",
 		"real-auto-handoff.spec.ts",

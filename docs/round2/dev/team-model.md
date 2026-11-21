@@ -474,3 +474,20 @@ concluded question and step-three insistence still require new recorded evidence
 reverify reports describe newly observed results, so their evidence text remains
 a new attributed observation rather than an id lookup. Demo claims still cannot
 establish proof; the app derives demo eligibility from recorded facts.
+
+## Efficiency from the fifth real run, 2026-11-20
+
+A real medium run spent 23 turns after the baseline without delivering. Four app causes, each fixed with a regression built from that run:
+
+- **The confirmed baseline governs.** On `baseline_confirmed`, every earlier decision is marked `supersededByBaseline` with that version. Prompts list such decisions as historical, with no actions, and the rules line says the owner-confirmed baseline governs. A standard issue that only asks whether such a decision or the baseline governs is resolved by the app (`standard_issue_resolved` with `baselineVersion`) without a discussion; a question backed by evidence recorded after confirmation still goes to PM. The Decisions tab marks superseded decisions.
+- **An experiment does not force a round.** When every current-round response agrees, a completed experiment is recorded as evidence in the decision and the discussion closes. Another round is dispatched only when a response disagrees or the result contradicts the experiment's optional `expectExit`.
+- **Decided steps carry their phase.** Conclusion actions still give each participant a next step (PRD 6.5 step 4). After confirmation, dev steps run as work or fix and QA steps as qa_prep; PM steps and steps from a standard issue (R1-10) stay message turns. The note names the steps and the decision they come from and says the turn carries no message ids; the pre-baseline "preparation only" note appears only before confirmation.
+- **A check can expect a nonzero exit.** Brief checks accept `expectExit` (integer, default 0; `expectedExit` is normalized). The runner records `expectedExitCode`, and every pass judgement (criterion status, batch pass, failure fingerprints, feed) compares against it. The baseline card and feed show the expected code when it is not 0. Single-conversation checks are unchanged unless a definition carries the field.
+
+## Draft brief points, from the seventh real run, 2026-11-21
+
+Before the owner confirms a baseline the brief is a draft (R1-1), so the standard change rules do not apply yet. A standard question or criterion edit attached to a challenge becomes an objection in that challenge, answered by PM in the respond turn (6.4); only a point PM marks `discuss` opens a discussion. A criterion edit PM reports before confirmation publishes the next brief version, which goes through the capped changed-criteria challenge round, instead of a standard change discussion and a commitment card. After confirmation everything is unchanged. The seventh run spent about 24 of its 40 turns before the baseline on exactly these two paths.
+
+## Repeated seat faults, from the first M2-10 real run, 2026-11-21
+
+A seat that hits the same fault (session broken, missing report or bad report) a second time without a milestone in between is recorded as unavailable for this team (`quota_exhausted` with `cause: 'repeated-fault'`) and goes through the takeover order: the selected substitute, then an authorized temporary takeover by a team model in a new conversation, then an owner card. A milestone is a dev submission, a completed work report, any non-work report, or a model change for the seat. A repeated-fault entry is never restored by a quota reset, and its card offers no wait or deadline extension. In the run, a light developer model hit its session token limit on every work turn; each fresh session counted as recovered, so the cycle repeated five times and spent 25 turns before the run was stopped.

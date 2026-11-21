@@ -30,6 +30,30 @@ it('keeps bounded visible prose while hiding valid, malformed and tilde report f
 });
 
 describe('extractTeamReport', () => {
+	it('accepts an expected exit code on a brief check, normalizing the expectedExit spelling', () => {
+		for (const field of ['expectExit', 'expectedExit'] as const) {
+			const brief = {
+				...goodReports.brief,
+				checks: [
+					...goodReports.brief.checks,
+					{ command: 'node cli.cjs add 1e3 2', covers: ['A1'], [field]: 2 },
+				],
+			};
+			const result = validateTeamReport(brief, 'brief', 'pm');
+			expect(result.ok).toBe(true);
+			if (!result.ok || result.report.type !== 'brief') throw new Error('Expected a brief');
+			expect(result.report.checks.at(-1)).toEqual({
+				command: 'node cli.cjs add 1e3 2',
+				covers: ['A1'],
+				expectExit: 2,
+			});
+		}
+		const fractional = {
+			...goodReports.brief,
+			checks: [{ command: 'node cli.cjs', covers: ['A1'], expectExit: 1.5 }],
+		};
+		expect(validateTeamReport(fractional, 'brief', 'pm').ok).toBe(false);
+	});
 	it('takes the last report and never falls back to an earlier valid one', () => {
 		expect(
 			extractTeamReport(`${block(goodReports.work)}\nDone\n${block(goodReports.demo)}`)

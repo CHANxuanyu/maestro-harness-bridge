@@ -4,6 +4,7 @@ import {
 	discussionDecider,
 	missingOutputLocations,
 	pmMayChange,
+	repeatedSeatFault,
 	referenceVotes,
 	topicRejection,
 	teamEvidence,
@@ -23,7 +24,7 @@ import type {
 	TeamEvent,
 	TeamReport,
 } from '../../../shared/team/types';
-import { baseline, brief, check, ledger, proven, goodReports } from './fixtures';
+import { baseline, brief, check, ledger, proven, goodReports, type EventInput } from './fixtures';
 
 const opened = {
 	kind: 'discussion_opened' as const,
@@ -524,4 +525,216 @@ it('distinguishes genuine external conditions and unobservable prose from app-ow
 		expect(teamWaitRejection(wait)).toBeUndefined();
 	expect(teamWaitRejection({ waitFor: 'New measured output' })).toContain('No external condition');
 	expect(teamWaitRejection({ waitFor: 'CI', needs: ['qa'] })).toContain('app-owned');
+});
+
+describe('confirmed baseline over pre-baseline decisions', () => {
+	// Real run 5 (2026-11-20): QA's report after baseline v3, trimmed to the fields used.
+	const realTopic = {
+		topic: 'PM decision accepts exponents but confirmed cli-contract v3 rejects them',
+		why: 'The ledger decision says to accept e/E exponents. Confirmed criterion cli-contract v3 and the check `add 1e3 2` say to reject exponents.',
+		participants: ['pm', 'dev', 'qa'],
+		owner: 'pm',
+		layer: 'product',
+		kind: 'standard',
+		criterionId: 'A1',
+		question:
+			'Which governs: v3 (reject exponents, check `add 1e3 2` expects exit 2) or the PM decision (accept e/E exponents)?',
+	} as const;
+	const dispatch = ledger({
+		kind: 'turn_dispatched',
+		dispatchId: 'qa-prep',
+		seat: 'qa',
+		turn: 'qa_prep',
+		promptDigest: '',
+	})[0] as TeamEvent<'turn_dispatched'>;
+	const stateWith = (decisionBeforeBaseline: boolean) =>
+		reduceLedger(
+			ledger(
+				...baseline.slice(0, 2),
+				...(decisionBeforeBaseline
+					? [
+							{
+								kind: 'discussion_closed',
+								discussionId: 'early',
+								decision: 'Accept e/E exponents',
+								decider: 'pm',
+								contested: false,
+								dissent: '',
+								actions: [],
+							} as const,
+						]
+					: []),
+				baseline[2]
+			)
+		);
+
+	it('resolves an authority question about a superseded decision without opening a discussion', () => {
+		const events = reportEvents(
+			dispatch,
+			{ ...goodReports.qa_prep, topic: realTopic } as TeamReport,
+			stateWith(true)
+		);
+		expect(events.map((e) => e.kind)).toEqual(
+			expect.arrayContaining(['issue_opened', 'standard_issue_resolved'])
+		);
+		expect(events.some((e) => e.kind === 'discussion_opened')).toBe(false);
+		expect(events.find((e) => e.kind === 'standard_issue_resolved')).toMatchObject({
+			baselineVersion: 1,
+		});
+	});
+
+	it('still routes a genuine standard problem to PM when no decision was superseded', () => {
+		const events = reportEvents(
+			dispatch,
+			{ ...goodReports.qa_prep, topic: realTopic } as TeamReport,
+			stateWith(false)
+		);
+		expect(events.some((e) => e.kind === 'standard_issue_resolved')).toBe(false);
+		expect(events.some((e) => e.kind === 'discussion_opened')).toBe(true);
+	});
+
+	it('shows a superseded decision to members as historical, with no actions to apply', () => {
+		const prompt = buildTeamTurnPrompt('work', 'dev', stateWith(true));
+		expect(prompt).toContain('Superseded by baseline v1; historical only, do not apply.');
+		expect(prompt).toContain('the owner-confirmed baseline governs');
+	});
+});
+
+describe('a draft brief before the owner confirms it', () => {
+	// Real run 7 (2026-11-21): a QA challenge raised a standard question that became a
+	// 14-turn discussion, and a PM criterion edit before confirmation became an owner card.
+	const draftState = reduceLedger(ledger(...baseline.slice(0, 2)));
+	const confirmedState = reduceLedger(ledger(...baseline));
+	const dispatchFor = (seat: 'pm' | 'qa', turn: 'challenge' | 'message') =>
+		ledger({
+			kind: 'turn_dispatched',
+			dispatchId: `${seat}-${turn}`,
+			seat,
+			turn,
+			promptDigest: '',
+		})[0] as TeamEvent<'turn_dispatched'>;
+	const tightened = {
+		criterionId: 'A2',
+		change: 'tighten',
+		reason: 'Name the rejected spellings',
+		criterion: {
+			id: 'A2',
+			text: 'Rejects bad input, including exponents and whitespace',
+			proof: 'qa',
+			how: 'Try invalid samples',
+		},
+	} as const;
+
+	it('turns a standard question in a challenge into an objection for PM, not a discussion', () => {
+		const events = reportEvents(
+			dispatchFor('qa', 'challenge'),
+			{
+				...goodReports.challenge,
+				topic: {
+					topic: 'Expected behavior at decimal input boundaries',
+					why: 'The contract is silent about exponents',
+					question: 'Are exponents accepted?',
+					participants: ['qa', 'pm'],
+					kind: 'standard',
+					criterionId: 'A2',
+				},
+				standardChanges: [tightened],
+			} as TeamReport,
+			draftState
+		);
+		expect(events.map((e) => e.kind)).toEqual(['challenge_submitted']);
+		expect(events[0]).toMatchObject({
+			objections: [
+				{
+					about: 'A2',
+					kind: 'unverifiable',
+					problem: expect.stringContaining('Are exponents accepted?'),
+				},
+				{
+					about: 'A2',
+					kind: 'unreasonable',
+					problem: expect.stringContaining('exponents and whitespace'),
+				},
+			],
+		});
+	});
+
+	it('publishes a PM criterion edit as the next draft version instead of a commitment card', () => {
+		const events = reportEvents(
+			dispatchFor('pm', 'message'),
+			{
+				type: 'message',
+				summary: 'Recorded the decided grammar',
+				messages: [],
+				standardChanges: [tightened],
+			} as TeamReport,
+			draftState
+		);
+		expect(events.some((e) => e.kind === 'discussion_opened')).toBe(false);
+		const published = events.find((e) => e.kind === 'brief_published');
+		expect(published).toMatchObject({ brief: { version: 2 } });
+		expect(
+			published?.kind === 'brief_published' &&
+				published.brief.criteria.find((c) => c.id === 'A2')?.text
+		).toBe('Rejects bad input, including exponents and whitespace');
+	});
+
+	it('keeps the standard change rules once the baseline is confirmed', () => {
+		const events = reportEvents(
+			dispatchFor('pm', 'message'),
+			{
+				type: 'message',
+				summary: 'Tighten A2',
+				messages: [],
+				standardChanges: [tightened],
+			} as TeamReport,
+			confirmedState
+		);
+		expect(events.find((e) => e.kind === 'discussion_opened')).toMatchObject({
+			trigger: 'standard-change',
+		});
+		expect(events.some((e) => e.kind === 'brief_published')).toBe(false);
+	});
+});
+
+describe('repeated seat faults', () => {
+	const fault = (fault: 'session-broken' | 'missing-report'): EventInput => ({
+		kind: 'member_fault',
+		seat: 'dev',
+		fault,
+		detail: 'Maximum token limit reached. Start a new session to continue.',
+	});
+	const workReport = (claimsComplete: boolean): EventInput => ({
+		kind: 'report_accepted',
+		actor: 'dev',
+		seat: 'dev',
+		dispatchId: 'w',
+		report: { ...goodReports.work, claimsComplete } as TeamReport,
+	});
+	// The M2-10 cycle: token limit, missing report, a repaired partial report, again.
+	const cycle = [fault('session-broken'), fault('missing-report'), workReport(false)];
+
+	it('flags the second identical fault when only partial work was reported in between', () => {
+		expect(repeatedSeatFault(ledger(...cycle), 'dev')).toBeUndefined();
+		expect(repeatedSeatFault(ledger(...cycle, fault('session-broken')), 'dev')).toMatchObject({
+			fault: 'session-broken',
+		});
+	});
+
+	it('starts over after a milestone or a different model', () => {
+		for (const reset of [
+			workReport(true),
+			{ kind: 'workspace_submitted', revision: 'abc', dispatchId: 'w' } as EventInput,
+			{
+				kind: 'seat_bound',
+				seat: 'dev',
+				workspace: '/w',
+				model: { tool: 'codex' },
+				reason: 'temporary',
+			} as EventInput,
+		])
+			expect(
+				repeatedSeatFault(ledger(...cycle, reset, fault('session-broken')), 'dev')
+			).toBeUndefined();
+	});
 });

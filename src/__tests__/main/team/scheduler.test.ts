@@ -336,6 +336,7 @@ describe('team scheduler', () => {
 			evidenceByRound?: Record<number, string>;
 			waitForQa?: string;
 			experiment?: string;
+			experimentExpectExit?: number;
 			compromise?: string;
 		} = {}
 	) => {
@@ -380,6 +381,9 @@ describe('team scheduler', () => {
 								command: options.experiment,
 								basis: 'Two objections',
 								expected: 'One observed result',
+								...(options.experimentExpectExit !== undefined
+									? { expectExit: options.experimentExpectExit }
+									: {}),
 							},
 						}
 					: {}),
@@ -401,7 +405,7 @@ describe('team scheduler', () => {
 	const completeActions = async () => {
 		for (let step = 0; step < 10; step++) {
 			const turn = state().turns.find(
-				(t) => !t.finished && t.dispatched?.note?.startsWith('Carry out the decided')
+				(t) => !t.finished && t.dispatched?.note?.startsWith('Decided next steps')
 			);
 			if (!turn) return;
 			const request = requests.find((r) => r.dispatchId === turn.dispatchId)!;
@@ -1526,6 +1530,81 @@ describe('team scheduler', () => {
 		expect(deps.followUps.register).toHaveBeenCalled();
 		expect(state().openCards).toEqual([]);
 	});
+	it('closes a unanimous discussion on a consistent experiment without another round (real run 5)', async () => {
+		await toReview();
+		await finish(latest('pm', 'review'), {
+			...goodReports.review,
+			topic: {
+				topic: 'Exponent operands',
+				why: 'Confirm the probe',
+				layer: 'product',
+				participants: ['pm', 'dev', 'qa'],
+			},
+		} as TeamReport);
+		const id = await completeDiscussion({ experiment: 'probe-exponent', experimentExpectExit: 0 });
+		await vi.waitFor(() =>
+			expect(state().discussions.find((d) => d.id === id)!.decision).toBeDefined()
+		);
+		const discussion = state().discussions.find((d) => d.id === id)!;
+		expect(discussion.proposals).toHaveLength(1);
+		expect(discussion.decision!.decision).toContain('Experiment `probe-exponent` exited 0');
+		expect(requests.some((r) => r.prompt.includes('Experiment result:'))).toBe(false);
+	});
+	it('opens another round when the experiment contradicts the exit code the proposal named', async () => {
+		await toReview();
+		await finish(latest('pm', 'review'), {
+			...goodReports.review,
+			topic: {
+				topic: 'Exponent operands',
+				why: 'Confirm the probe',
+				layer: 'product',
+				participants: ['pm', 'dev', 'qa'],
+			},
+		} as TeamReport);
+		const id = await completeDiscussion({ experiment: 'probe-exponent', experimentExpectExit: 2 });
+		await vi.waitFor(() => expect(latest('pm', 'proposal').prompt).toContain('Experiment result:'));
+		expect(state().discussions.find((d) => d.id === id)!.decision).toBeUndefined();
+	});
+	it('gives decided steps after the baseline the right turn, without the pre-baseline note', async () => {
+		await toReview();
+		await finish(latest('pm', 'review'), {
+			...goodReports.review,
+			topic: {
+				topic: 'Help wording',
+				why: 'Clarify the usage text',
+				layer: 'product',
+				participants: ['pm', 'dev', 'qa'],
+			},
+		} as TeamReport);
+		await completeDiscussion();
+		const seen: { seat: string; turn: string; note: string }[] = [];
+		for (let step = 0; step < 6; step++) {
+			const turn = state().turns.find(
+				(t) => !t.finished && t.dispatched?.note?.startsWith('Decided next steps')
+			);
+			if (!turn) break;
+			seen.push({ seat: turn.seat, turn: turn.dispatched!.turn, note: turn.dispatched!.note! });
+			const request = requests.find((r) => r.dispatchId === turn.dispatchId)!;
+			const kind = turn.dispatched!.turn;
+			await finish(
+				request,
+				kind === 'message'
+					? { type: 'message', summary: 'Prepared the agreed step', messages: [] }
+					: kind === 'qa_prep'
+						? goodReports.qa_prep
+						: goodReports.work
+			);
+		}
+		expect(seen.map(({ seat, turn }) => `${seat}:${turn}`).sort()).toEqual([
+			'dev:work',
+			'pm:message',
+			'qa:qa_prep',
+		]);
+		for (const { note } of seen) {
+			expect(note).not.toContain('not confirmed');
+			expect(note).toContain('implements the conclusion');
+		}
+	});
 	it('allows a third round for newly introduced evidence without reopening a closed decision', async () => {
 		await toReview();
 		await finish(latest('pm', 'review'), {
@@ -2579,6 +2658,42 @@ describe('team scheduler', () => {
 		expect(events.some((e) => e.kind === 'workspace_inspected')).toBe(true);
 	});
 
+	it('M3 a seat failing the same way after a fresh conversation goes to the takeover order (real M2-10)', async () => {
+		await begin();
+		const original = requests[0];
+		const tokenLimit = 'Maximum token limit reached. Start a new session to continue.';
+		completions.get(original.dispatchId!)!({
+			...result(original, ''),
+			exitCode: 1,
+			failure: { kind: 'session-broken', detail: tokenLimit },
+		});
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+		await drain();
+		const fresh = requests[1];
+		expect(fresh).toMatchObject({ tool: original.tool, nativeSessionId: undefined });
+		completions.get(fresh.dispatchId!)!({
+			...result(fresh, ''),
+			exitCode: 1,
+			failure: { kind: 'session-broken', detail: tokenLimit },
+		});
+		await drain();
+		await vi.advanceTimersByTimeAsync(TEAM_FALLBACK_MS);
+		await drain();
+		expect(state().unavailable.at(-1)).toMatchObject({
+			seat: 'pm',
+			cause: 'repeated-fault',
+			detail: expect.stringContaining(tokenLimit),
+		});
+		expect(events.find((e) => e.kind === 'substitute_took_over')).toMatchObject({
+			seat: 'pm',
+			temporary: true,
+		});
+		const takeover = requests.at(-1)!;
+		expect(takeover.dispatchId).not.toBe(fresh.dispatchId);
+		expect([takeover.tool, takeover.model]).not.toEqual([original.tool, original.model]);
+		expect(takeover.nativeSessionId).toBeUndefined();
+	});
 	it('M3 still-working is not a fault, login identifies the account while authorized takeover works', async () => {
 		deps.seatAccountDir = vi.fn(() => '/synthetic/pm-account');
 		await begin();

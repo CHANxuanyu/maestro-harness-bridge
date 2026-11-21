@@ -164,6 +164,8 @@ export interface DiscussionExperiment {
 	boundary?: CheckBoundary;
 	basis: string;
 	expected: string;
+	/** The exit code that would confirm the proposal; a different code contradicts it. */
+	expectExit?: number;
 }
 
 export interface StandardChangeRequest {
@@ -206,6 +208,7 @@ export interface BaselineDiff {
 
 export interface CheckCommand {
 	command: string;
+	expectExit?: number;
 	boundary?: CheckBoundary;
 	covers: string[];
 }
@@ -517,6 +520,7 @@ export type LedgerEvent = EventBase &
 				command: string;
 				cwd: string;
 				exitCode: number | null;
+				expectedExitCode?: number;
 				outputTail: string;
 				durationMs: number;
 				covers: string[];
@@ -544,7 +548,7 @@ export type LedgerEvent = EventBase &
 		  }
 		| { kind: 'issue_fixed'; issueId: string; summary?: string }
 		| { kind: 'issue_verified'; issueId: string; pass: boolean; evidence?: string }
-		| { kind: 'standard_issue_resolved'; issueId: string; reason: string }
+		| { kind: 'standard_issue_resolved'; issueId: string; reason: string; baselineVersion?: number }
 		| {
 				kind: 'criterion_evidence';
 				criterionId: string;
@@ -678,6 +682,8 @@ export type LedgerEvent = EventBase &
 				configSource?: SeatRole;
 				detail?: string;
 				login?: boolean;
+				/** `repeated-fault`: the model keeps failing this seat; no reset will bring it back. */
+				cause?: 'quota' | 'repeated-fault';
 		  }
 		| { kind: 'substitute_took_over'; seat: SeatRole; model: SeatModel; temporary?: boolean }
 		| { kind: 'member_fault'; seat: SeatRole; fault: MemberFaultKind; detail?: string }
@@ -933,13 +939,18 @@ export interface TeamIssue {
 	>;
 }
 
+export type TeamDecision = TeamEvent<'discussion_closed'> & {
+	/** Derived from owner confirmation, never a member's assertion. */
+	supersededByBaseline?: number;
+};
+
 export interface TeamDiscussion {
 	id: string;
 	opened?: TeamEvent<'discussion_opened'>;
 	positions: TeamEvent<'position'>[];
 	proposals: TeamEvent<'proposal'>[];
 	responses: TeamEvent<'response'>[];
-	decision?: TeamEvent<'discussion_closed'>;
+	decision?: TeamDecision;
 }
 
 export interface ReportNormalization {
@@ -1021,7 +1032,7 @@ export interface TeamState {
 	checks: TeamEvent<'check_run'>[];
 	issues: TeamIssue[];
 	discussions: TeamDiscussion[];
-	decisions: TeamEvent<'discussion_closed'>[];
+	decisions: TeamDecision[];
 	standardChanges: TeamEvent<'standard_change'>[];
 	followUps: TeamEvent<'follow_up_registered'>[];
 	openCards: OwnerCard[];

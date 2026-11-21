@@ -5,6 +5,7 @@
 // any native events. The optional test gate holds exit only after it finishes,
 // letting history acceptance snapshot the original transcript before synopsis.
 const fs = require('node:fs');
+const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
 const args = process.argv.slice(2);
@@ -14,6 +15,24 @@ const control =
 		? JSON.parse(fs.readFileSync(process.env.MAESTRO_E2E_CONTROL, 'utf8'))
 		: {};
 if (!inspection && control.record) {
+	// Team seats can start concurrently, including two seats using Claude.
+	// Exclusive slots enforce one shared paid-launch cap without a read/count race.
+	if (control.budgetDirectory) {
+		let reserved = false;
+		for (let slot = 0; slot < control.maxInvocations; slot++) {
+			try {
+				fs.closeSync(fs.openSync(path.join(control.budgetDirectory, String(slot)), 'wx'));
+				reserved = true;
+				break;
+			} catch (error) {
+				if (error.code !== 'EEXIST') throw error;
+			}
+		}
+		if (!reserved) {
+			console.error('Acceptance shared turn budget exceeded');
+			process.exit(1);
+		}
+	}
 	const count = fs.existsSync(control.record)
 		? fs.readFileSync(control.record, 'utf8').trim().split('\n').filter(Boolean).length
 		: 0;

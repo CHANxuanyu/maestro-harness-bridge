@@ -59,6 +59,27 @@ describe('check runner', () => {
 		}
 	});
 
+	it.each([
+		[2, 2, 'pass'],
+		[0, 2, 'fail'],
+		[2, undefined, 'fail'],
+	] as const)(
+		'judges exit %s against an expected %s as %s',
+		async (exitCode, expectedExitCode, outcome) => {
+			const exec = vi.fn(() => ({
+				cancel: vi.fn(),
+				result: Promise.resolve({ exitCode, stdout: '', stderr: '' }),
+			}));
+			const result = await createCheckRunner({ exec }).run({
+				command: 'node cli.cjs add 1e3 2',
+				cwd: os.tmpdir(),
+				expectedExitCode,
+			});
+			expect(result.outcome).toBe(outcome);
+			expect(result.expectedExitCode).toBe(expectedExitCode);
+		}
+	);
+
 	it('stores the output tail without color codes', async () => {
 		const exec = vi.fn((_command: string, _args: string[], options: ExecStreamingOptions) => {
 			options.onChunk('\u001b[32m✔ greets \u001b[90m(0.5ms)\u001b[39m\n', 'stdout');

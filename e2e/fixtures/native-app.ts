@@ -296,6 +296,8 @@ export class NativeApp {
 			[path.resolve('dist/cli/maestro-cli.js'), ...args],
 			{
 				env: { ...process.env, ...this.env, ...env },
+				// Team ledgers from long real runs exceed the 1 MB execFile default.
+				maxBuffer: 256 * 1024 * 1024,
 			}
 		).catch((error: Error & { stdout?: string; stderr?: string }) => {
 			throw new Error(

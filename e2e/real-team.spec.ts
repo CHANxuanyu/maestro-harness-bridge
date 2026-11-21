@@ -259,8 +259,14 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 			expect(experience.length).toBeGreaterThan(0);
 			const output = state.outputs.at(-1)!;
 			const usageFile = path.join(state.seats.dev.binding!.workspace, 'usage.txt');
-			expect(output.files).toContain(usageFile);
 			const usage = fs.readFileSync(usageFile, 'utf8');
+			// Captured outputs are immutable snapshots of workspace files (M2), so the
+			// evidence is a copy of dev's usage.txt, compared byte for byte.
+			const captured = output.files.find((file) =>
+				/[\\/]files[\\/]dev[\\/][a-f0-9]{64}[\\/]usage\.txt$/.test(file)
+			);
+			expect(captured, 'usage.txt must be captured from the dev workspace').toBeTruthy();
+			expect(fs.readFileSync(captured!, 'utf8')).toBe(usage);
 			const help = state.checks
 				.filter(
 					(check) => check.command === 'node cli.cjs --help' && check.purpose === 'verification'

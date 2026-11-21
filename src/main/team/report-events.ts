@@ -99,6 +99,46 @@ export function reportEvents(
 			'standard-change',
 			change
 		);
+	// Before the owner confirms a baseline the brief is a draft (PRD 6.6 R1-1): a
+	// standard question or criterion edit raised in a challenge is a point for PM's
+	// answer (6.4), not a discussion or a commitment card of its own.
+	const draft = !state.baseline.confirmedVersion && !!state.brief;
+	const foldedIntoChallenge = draft && report.type === 'challenge';
+	const draftObjections = () =>
+		foldedIntoChallenge
+			? [
+					...(typeof report.topic === 'object' && report.topic.kind === 'standard'
+						? [
+								{
+									about: report.topic.criterionId ?? report.topic.topic,
+									problem: [report.topic.topic, report.topic.why, report.topic.question]
+										.filter(Boolean)
+										.join(' '),
+									kind: 'unverifiable' as const,
+								},
+							]
+						: []),
+					...(report.standardChanges ?? []).map((change) => ({
+						about: change.criterionId,
+						problem: `Proposed ${change.change}: ${change.criterion?.text ?? 'remove this criterion'}. ${change.reason}`,
+						kind: 'unreasonable' as const,
+					})),
+				]
+			: [];
+	/** PM edits a draft criterion by publishing the next brief version, never by a standard change. */
+	const draftRevision = (changes: StandardChangeRequest[]) => {
+		const criteria = [...state.brief!.criteria];
+		for (const change of changes) {
+			const index = criteria.findIndex((c) => c.id === change.criterionId);
+			if (change.change === 'remove') {
+				if (index >= 0) criteria.splice(index, 1);
+			} else if (change.criterion) {
+				if (index >= 0) criteria[index] = change.criterion;
+				else criteria.push(change.criterion);
+			}
+		}
+		brief({ ...state.brief!, criteria });
+	};
 	const brief = (value: NonNullable<Extract<TeamReport, { type: 'respond' }>['brief']>) => {
 		const next = {
 			...value,
@@ -170,7 +210,7 @@ export function reportEvents(
 				kind: 'challenge_submitted',
 				actor,
 				seat: actor,
-				objections: report.objections,
+				objections: [...report.objections, ...draftObjections()],
 				plans: report.plans,
 				briefVersion: state.brief?.version,
 			});
@@ -489,8 +529,17 @@ export function reportEvents(
 			(item) => item.discussionId && item.owner === actor && item.state === 'claimed'
 		))
 			add({ ...item, kind: 'work_item', actor, state: 'done' });
-	if (typeof report.topic === 'object') topic(report.topic);
-	for (const change of report.standardChanges ?? []) standardChange(change);
+	if (
+		typeof report.topic === 'object' &&
+		!(foldedIntoChallenge && report.topic.kind === 'standard')
+	)
+		topic(report.topic);
+	if (report.standardChanges?.length) {
+		if (foldedIntoChallenge) {
+			// Already recorded as objections for PM's answer.
+		} else if (draft && actor === 'pm') draftRevision(report.standardChanges);
+		else for (const change of report.standardChanges) standardChange(change);
+	}
 
 	for (const action of report.requestedActions ?? [])
 		add({ kind: 'action_requested', actor, ...action });

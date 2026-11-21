@@ -598,3 +598,100 @@ describe('confirmed baseline over pre-baseline decisions', () => {
 		expect(prompt).toContain('the owner-confirmed baseline governs');
 	});
 });
+
+describe('a draft brief before the owner confirms it', () => {
+	// Real run 7 (2026-11-21): a QA challenge raised a standard question that became a
+	// 14-turn discussion, and a PM criterion edit before confirmation became an owner card.
+	const draftState = reduceLedger(ledger(...baseline.slice(0, 2)));
+	const confirmedState = reduceLedger(ledger(...baseline));
+	const dispatchFor = (seat: 'pm' | 'qa', turn: 'challenge' | 'message') =>
+		ledger({
+			kind: 'turn_dispatched',
+			dispatchId: `${seat}-${turn}`,
+			seat,
+			turn,
+			promptDigest: '',
+		})[0] as TeamEvent<'turn_dispatched'>;
+	const tightened = {
+		criterionId: 'A2',
+		change: 'tighten',
+		reason: 'Name the rejected spellings',
+		criterion: {
+			id: 'A2',
+			text: 'Rejects bad input, including exponents and whitespace',
+			proof: 'qa',
+			how: 'Try invalid samples',
+		},
+	} as const;
+
+	it('turns a standard question in a challenge into an objection for PM, not a discussion', () => {
+		const events = reportEvents(
+			dispatchFor('qa', 'challenge'),
+			{
+				...goodReports.challenge,
+				topic: {
+					topic: 'Expected behavior at decimal input boundaries',
+					why: 'The contract is silent about exponents',
+					question: 'Are exponents accepted?',
+					participants: ['qa', 'pm'],
+					kind: 'standard',
+					criterionId: 'A2',
+				},
+				standardChanges: [tightened],
+			} as TeamReport,
+			draftState
+		);
+		expect(events.map((e) => e.kind)).toEqual(['challenge_submitted']);
+		expect(events[0]).toMatchObject({
+			objections: [
+				{
+					about: 'A2',
+					kind: 'unverifiable',
+					problem: expect.stringContaining('Are exponents accepted?'),
+				},
+				{
+					about: 'A2',
+					kind: 'unreasonable',
+					problem: expect.stringContaining('exponents and whitespace'),
+				},
+			],
+		});
+	});
+
+	it('publishes a PM criterion edit as the next draft version instead of a commitment card', () => {
+		const events = reportEvents(
+			dispatchFor('pm', 'message'),
+			{
+				type: 'message',
+				summary: 'Recorded the decided grammar',
+				messages: [],
+				standardChanges: [tightened],
+			} as TeamReport,
+			draftState
+		);
+		expect(events.some((e) => e.kind === 'discussion_opened')).toBe(false);
+		const published = events.find((e) => e.kind === 'brief_published');
+		expect(published).toMatchObject({ brief: { version: 2 } });
+		expect(
+			published?.kind === 'brief_published' &&
+				published.brief.criteria.find((c) => c.id === 'A2')?.text
+		).toBe('Rejects bad input, including exponents and whitespace');
+	});
+
+	it('keeps the standard change rules once the baseline is confirmed', () => {
+		const events = reportEvents(
+			dispatchFor('pm', 'message'),
+			{
+				type: 'message',
+				summary: 'Tighten A2',
+				messages: [],
+				standardChanges: [tightened],
+			} as TeamReport,
+			confirmedState
+		);
+		expect(events.find((e) => e.kind === 'discussion_opened')).toMatchObject({
+			trigger: 'standard-change',
+		});
+		expect(events.some((e) => e.kind === 'brief_published')).toBe(false);
+	});
+});

@@ -504,6 +504,11 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 			retros: events.filter((event) => event.kind === 'retro').length,
 			recoveries: events.filter((event) => event.kind === 'member_recovered').length,
 			turns: events.filter((event) => event.kind === 'turn_dispatched').length,
+			// M3 statistics, recounted from the ledger rather than copied from the app.
+			ownerMessages: 0,
+			wakes: events.filter((event) => event.kind === 'turn_dispatched' && event.mode === 'wake')
+				.length,
+			substitutions: events.filter((event) => event.kind === 'substitute_took_over').length,
 		});
 		expect(new Set(events.map((event) => event.id)).size).toBe(events.length);
 		expect(state.turns.every((turn) => !!turn.finished)).toBe(true);
@@ -515,7 +520,9 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 		);
 		expect(requests).toHaveLength(state.usage.turns);
 		for (const seat of SEAT_ROLES) {
-			const provider = seat === 'dev' ? 'codex' : 'claude';
+			// Each seat launches its configured vendor and model (MAESTRO_E2E_TEAM_*).
+			const configured = state.config!.seats[seat];
+			const provider = configured.tool === 'codex' ? 'codex' : 'claude';
 			const binding = state.seats[seat].binding!;
 			const launches = requests.filter(
 				(request) => request.provider === provider && request.cwd === binding.workspace
@@ -524,7 +531,9 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 			for (const launch of launches) {
 				const modelFlag = provider === 'codex' ? '-m' : '--model';
 				expect(launch.args).toContain(modelFlag);
-				expect(launch.args[launch.args.indexOf(modelFlag) + 1]).toBe(native.tools[provider].model);
+				expect(launch.args[launch.args.indexOf(modelFlag) + 1]).toBe(
+					configured.model ?? native.tools[provider].model
+				);
 				if (provider === 'claude') {
 					expect(launch.args[launch.args.indexOf('--max-turns') + 1]).toBe('8');
 					if (seat === 'pm')

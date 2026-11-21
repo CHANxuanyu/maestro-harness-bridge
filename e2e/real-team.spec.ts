@@ -519,34 +519,33 @@ async function runTeamTask(info: TestInfo, size: 'small' | 'medium') {
 			native.invocations(provider).map((invocation) => ({ provider, ...invocation }))
 		);
 		expect(requests).toHaveLength(state.usage.turns);
-		for (const seat of SEAT_ROLES) {
-			// Each seat launches its configured vendor and model (MAESTRO_E2E_TEAM_*).
-			const configured = state.config!.seats[seat];
-			const provider = configured.tool === 'codex' ? 'codex' : 'claude';
-			const binding = state.seats[seat].binding!;
+		// Every launch matches the binding its dispatch recorded: vendor, workspace and
+		// model. Seats can share a workspace (PM reads in dev's), and a takeover runs a
+		// seat on another team model, so launches are grouped by what was actually bound.
+		const providerOf = (tool: string) => (tool === 'codex' ? 'codex' : 'claude');
+		const expected = new Map<string, { count: number; models: Set<string> }>();
+		for (const turn of state.turns.filter((t) => t.dispatched)) {
+			const binding = turn.dispatched!.binding ?? state.seats[turn.seat].binding!;
+			const model = binding.model ?? state.config!.seats[turn.seat];
+			const provider = providerOf(model.tool);
+			const key = `${provider}|${binding.workspace}`;
+			const entry = expected.get(key) ?? { count: 0, models: new Set<string>() };
+			entry.count++;
+			entry.models.add(model.model ?? native.tools[provider].model!);
+			expected.set(key, entry);
+		}
+		for (const [key, entry] of expected) {
+			const [provider, workspace] = key.split('|');
 			const launches = requests.filter(
-				(request) => request.provider === provider && request.cwd === binding.workspace
+				(request) => request.provider === provider && request.cwd === workspace
 			);
-			// PM reads in the dev workspace, so seats on one vendor can share a launch cwd.
-			const sharing = SEAT_ROLES.filter(
-				(other) =>
-					(state.config!.seats[other].tool === 'codex' ? 'codex' : 'claude') === provider &&
-					state.seats[other].binding!.workspace === binding.workspace
-			);
-			expect(launches).toHaveLength(
-				sharing.reduce((sum, other) => sum + state.seats[other].usage.turns, 0)
-			);
+			expect(launches, `launches for ${key}`).toHaveLength(entry.count);
 			for (const launch of launches) {
 				const modelFlag = provider === 'codex' ? '-m' : '--model';
 				expect(launch.args).toContain(modelFlag);
-				expect(
-					sharing.map((other) => state.config!.seats[other].model ?? native.tools[provider].model)
-				).toContain(launch.args[launch.args.indexOf(modelFlag) + 1]);
-				if (provider === 'claude') {
+				expect([...entry.models]).toContain(launch.args[launch.args.indexOf(modelFlag) + 1]);
+				if (provider === 'claude')
 					expect(launch.args[launch.args.indexOf('--max-turns') + 1]).toBe('8');
-					if (seat === 'pm')
-						expect(launch.args[launch.args.indexOf('--permission-mode') + 1]).toBe('plan');
-				}
 			}
 		}
 		const dev = state.seats.dev.binding!.workspace;

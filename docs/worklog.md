@@ -1,5 +1,9 @@
 # 分支工作记录
 
+## 2026-11-21：额度余量的 Electron 场景（B1-4）
+
+`native-model-picker` 加上 D10 的三种状态：预置的 Codex 账户没有用量采样时选择器不显示额度一项；往隔离数据目录的用量存储写一条一分钟前的采样后，再打开选择器显示“Session: 63% remaining”“Weekly: 88% remaining”，没有过期提示；改成 25 小时前的采样后仍显示余量并标“Last available sample”。场景只读现有存储，不触发联网采样。本地 1 项通过（9.5 秒）；把样本键改到另一个账户目录后同一场景在“显示余量”一步失败，说明断言确实按账户读取。B1-4 改为已验收。
+
 ## 2026-11-21：hb.8 第二轮试用候选准备
 
 版本改为 `1.0.1-hb.8`（`package.json` 与 `package-lock.json` 两处）；CHANGELOG 把 Unreleased 的 55 条按团队群聊、单条对话的检查与跟进、新界面日常体验、其他修复重排到 hb.8 段落，并补上交付前走查的修复；新增[候选说明](release-notes/v1.0.1-hb.8.md)与[候选验证](verification/v1.0.1-hb.8.md)，README 与 `docs/fork.md` 指向 hb.8；第二轮进度表按最终证据更新状态。`node scripts/hb-release.mjs check` 通过。本次只改文档和版本字段，没有构建、打标签或上传。
